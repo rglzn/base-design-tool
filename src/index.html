@@ -14,7 +14,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
-  <!-- Supabase JS v2 (calls added in Step 2) -->
+  <!-- Supabase JS v2 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
   <link rel="stylesheet" href="style.css" />
@@ -25,8 +25,8 @@
   <header id="topbar">
     <span class="topbar-logo">Base Design Tool</span>
     <div class="topbar-actions">
-      <button id="btn-save-project" class="btn-action" disabled>Save Project</button>
-      <button id="btn-load-project" class="btn-action" disabled>Load Project</button>
+      <button id="btn-save-project" class="btn-action">Save Project</button>
+      <button id="btn-load-project" class="btn-action">Load Project</button>
     </div>
   </header>
 
@@ -134,6 +134,66 @@
       </div>
     </div>
   </template>
+
+  <!-- First-run modal — no cancel, shown when no active project exists -->
+  <template id="tmpl-modal-first-run">
+    <div class="modal-overlay modal-overlay--locked" role="dialog" aria-modal="true">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span class="modal-title">Welcome to Base Design Tool</span>
+        </div>
+        <div class="modal-body-text">
+          <p class="modal-hint" style="padding:0 0 12px;">Name your first project to get started.</p>
+          <input type="text" class="text-input js-project-name"
+                 placeholder="Project name" maxlength="64" autocomplete="off" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn-primary js-first-run-create" disabled>Create</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Save Project modal -->
+  <template id="tmpl-modal-save-project">
+    <div class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span class="modal-title">Save Project</span>
+          <button class="btn-icon js-modal-close" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body-text">
+          <input type="text" class="text-input js-project-name"
+                 placeholder="Project name" maxlength="64" autocomplete="off" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary js-modal-close">Cancel</button>
+          <button class="btn-primary js-save-confirm" disabled>Save</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Load Project modal -->
+  <template id="tmpl-modal-load-project">
+    <div class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-box modal-box--load">
+        <div class="modal-header">
+          <span class="modal-title">Load Project</span>
+          <button class="btn-icon js-modal-close" aria-label="Close">✕</button>
+        </div>
+        <div class="project-list js-project-list">
+          <!-- populated by ui.js -->
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary js-modal-close">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ── Error banner ───────────────────────────────────────────────── -->
+  <div id="error-banner" class="error-banner" role="alert" aria-live="assertive"></div>
 
   <!-- ── SVG sprite ─────────────────────────────────────────────────── -->
   <svg id="svg-sprite" xmlns="http://www.w3.org/2000/svg"

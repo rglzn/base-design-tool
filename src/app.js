@@ -1,5 +1,8 @@
-/* app.js — state, mutations, init. No Supabase (Step 2). */
+/* app.js — state, mutations, Supabase persistence, init. */
 (function () {
+
+  const SUPABASE_URL = 'https://ekrlymbgjduczogvskox.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_d-nCBT9nVSi81_CYv4GUHw_h1_wc96F';
 
   const DEFAULT_COLOURS = [
     { id: 0, hex: '#3a6b8c' }, // default — pre-selected, never deletable
@@ -12,61 +15,85 @@
     { id: 7, hex: '#bdc3c7' },
   ];
 
-  let _nextColorId = DEFAULT_COLOURS.length;
+  let _nextColorId   = DEFAULT_COLOURS.length;
+  let _autosaveTimer = null;
 
   const state = {
     // persisted
-    building:       [{ bx: 0, bz: 0 }],
-    cells:          new Map(),   // key "x,y,z" → { object, direction, colorId }
-    colors:         DEFAULT_COLOURS.map(c => ({ ...c })),
-    project:        null,        // { id, name } — populated in Step 2
+    building:        [{ bx: 0, bz: 0 }],
+    cells:           new Map(),
+    colors:          DEFAULT_COLOURS.map(c => ({ ...c })),
+    project:         null,   // { id, name, isNamed }
 
     // editor-only
-    tool:           'build',
-    selectedObject: 'cube',
+    tool:            'build',
+    selectedObject:  'cube',
     selectedColorId: 0,
-    selection:      new Set(),   // Set of cell keys
+    selection:       new Set(),
   };
+
+  // Supabase client
+  window._sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   // ── Internal helpers ───────────────────────────────────────────
   function _markDirty() {
     if (window.Scene) window.Scene.markDirty();
+    _scheduleAutosave();
   }
 
   function _refreshUI() {
     if (window.UI) window.UI.refresh();
   }
 
-  function _blockHasContent(bx, bz) {
-    for (const key of state.cells.keys()) {
-      const [cx, , cz] = key.split(',').map(Number);
-      if (Math.floor(cx / 10) === bx && Math.floor(cz / 10) === bz) return true;
-    }
-    return false;
+  // ── Autosave ───────────────────────────────────────────────────
+  function _scheduleAutosave() {
+    if (!state.project) return;
+    clearTimeout(_autosaveTimer);
+    _autosaveTimer = setTimeout(_autosave, 2000);
   }
 
-  function _isConnected(blocks) {
-    if (blocks.length <= 1) return true;
-    const set = new Set(blocks.map(b => `${b.bx},${b.bz}`));
-    const visited = new Set();
-    const queue = [`${blocks[0].bx},${blocks[0].bz}`];
-    while (queue.length) {
-      const cur = queue.shift();
-      if (visited.has(cur)) continue;
-      visited.add(cur);
-      const [bx, bz] = cur.split(',').map(Number);
-      for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
-        const nb = `${bx + dx},${bz + dz}`;
-        if (set.has(nb) && !visited.has(nb)) queue.push(nb);
-      }
+  async function _autosave() {
+    if (!state.project) return;
+    try {
+      const thumbnail = window.Scene ? window.Scene.getSnapshot() : null;
+      await window._sb.from('projects').upsert({
+        id:       state.project.id,
+        name:     state.project.name,
+        is_named: state.project.isNamed,
+        data:     _serialize(),
+        thumbnail,
+      }, { onConflict: 'id' });
+    } catch (_) {
+      // autosave is silent — spec: "no indicator shown"
     }
-    return visited.size === blocks.length;
   }
 
-  function _inFootprint(x, z) {
-    const bx = Math.floor(x / 10);
-    const bz = Math.floor(z / 10);
-    return state.building.some(b => b.bx === bx && b.bz === bz);
+  // ── Serialise / deserialise ────────────────────────────────────
+  function _serialize() {
+    return {
+      building: state.building,
+      cells: [...state.cells.entries()].map(([key, cell]) => {
+        const [x, y, z] = key.split(',').map(Number);
+        return { x, y, z, object: cell.object, direction: cell.direction, colorId: cell.colorId };
+      }),
+      walls:  [],
+      colors: state.colors,
+    };
+  }
+
+  function _deserialize(data) {
+    if (!data) return;
+    state.building = data.building || [{ bx: 0, bz: 0 }];
+    state.cells    = new Map();
+    (data.cells || []).forEach(({ x, y, z, object, direction, colorId }) => {
+      state.cells.set(`${x},${y},${z}`, { object, direction, colorId });
+    });
+    state.colors  = data.colors || DEFAULT_COLOURS.map(c => ({ ...c }));
+    _nextColorId  = state.colors.reduce((m, c) => Math.max(m, c.id), -1) + 1;
+    state.selectedColorId = state.colors[0]?.id ?? 0;
+    state.selection       = new Set();
+    state.tool            = 'build';
+    state.selectedObject  = 'cube';
   }
 
   // ── Tool / object / colour ─────────────────────────────────────
@@ -91,6 +118,7 @@
   function addColor(hex) {
     const id = _nextColorId++;
     state.colors.push({ id, hex });
+    _scheduleAutosave();
     _refreshUI();
     return id;
   }
@@ -104,14 +132,11 @@
   }
 
   function deleteColor(id) {
-    if (id === 0) return; // default is protected
+    if (id === 0) return;
     const idx = state.colors.findIndex(c => c.id === id);
     if (idx === -1) return;
     state.colors.splice(idx, 1);
-    // cells using this colour fall back to the default
-    state.cells.forEach(cell => {
-      if (cell.colorId === id) cell.colorId = 0;
-    });
+    state.cells.forEach(cell => { if (cell.colorId === id) cell.colorId = 0; });
     if (state.selectedColorId === id) state.selectedColorId = 0;
     _markDirty();
     _refreshUI();
@@ -125,7 +150,7 @@
   // ── Cell placement ─────────────────────────────────────────────
   function placeCell(x, y, z) {
     const key = `${x},${y},${z}`;
-    if (state.cells.has(key)) return false; // no overwrite
+    if (state.cells.has(key)) return false;
     if (!_inFootprint(x, z)) return false;
     state.cells.set(key, {
       object:    state.selectedObject,
@@ -146,21 +171,9 @@
   }
 
   // ── Selection ──────────────────────────────────────────────────
-  function addToSelection(key) {
-    state.selection.add(key);
-    _refreshUI();
-  }
-
-  function removeFromSelection(key) {
-    state.selection.delete(key);
-    _refreshUI();
-  }
-
-  function clearSelection() {
-    if (state.selection.size === 0) return;
-    state.selection.clear();
-    _refreshUI();
-  }
+  function addToSelection(key) { state.selection.add(key);    _refreshUI(); }
+  function removeFromSelection(key) { state.selection.delete(key); _refreshUI(); }
+  function clearSelection() { if (state.selection.size) { state.selection.clear(); _refreshUI(); } }
 
   function deleteSelection() {
     state.selection.forEach(key => state.cells.delete(key));
@@ -170,10 +183,41 @@
   }
 
   // ── Footprint ──────────────────────────────────────────────────
+  function _inFootprint(x, z) {
+    const bx = Math.floor(x / 10);
+    const bz = Math.floor(z / 10);
+    return state.building.some(b => b.bx === bx && b.bz === bz);
+  }
+
+  function _blockHasContent(bx, bz) {
+    for (const key of state.cells.keys()) {
+      const [cx, , cz] = key.split(',').map(Number);
+      if (Math.floor(cx / 10) === bx && Math.floor(cz / 10) === bz) return true;
+    }
+    return false;
+  }
+
+  function _isConnected(blocks) {
+    if (blocks.length <= 1) return true;
+    const set = new Set(blocks.map(b => `${b.bx},${b.bz}`));
+    const visited = new Set();
+    const queue = [`${blocks[0].bx},${blocks[0].bz}`];
+    while (queue.length) {
+      const cur = queue.shift();
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      const [bx, bz] = cur.split(',').map(Number);
+      for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+        const nb = `${bx+dx},${bz+dz}`;
+        if (set.has(nb) && !visited.has(nb)) queue.push(nb);
+      }
+    }
+    return visited.size === blocks.length;
+  }
+
   function addBlock(bx, bz) {
     if (state.building.length >= 6) return false;
     if (state.building.some(b => b.bx === bx && b.bz === bz)) return false;
-    // must be adjacent to an existing block
     const adjacent = state.building.some(b =>
       (Math.abs(b.bx - bx) === 1 && b.bz === bz) ||
       (b.bx === bx && Math.abs(b.bz - bz) === 1)
@@ -185,8 +229,6 @@
     return true;
   }
 
-  // Returns { ok, reason?, hadContent? }
-  // Caller must show danger modal before calling if blockHasContent returns true.
   function removeBlock(bx, bz) {
     const idx = state.building.findIndex(b => b.bx === bx && b.bz === bz);
     if (idx === -1) return { ok: false, reason: 'not-found' };
@@ -210,10 +252,7 @@
     return { ok: true, hadContent };
   }
 
-  function blockHasContent(bx, bz) {
-    return _blockHasContent(bx, bz);
-  }
-
+  function blockHasContent(bx, bz)  { return _blockHasContent(bx, bz); }
   function canRemoveBlock(bx, bz) {
     const remaining = state.building.filter(b => !(b.bx === bx && b.bz === bz));
     return remaining.length === 0 || _isConnected(remaining);
@@ -224,41 +263,125 @@
     return `${n} block${n === 1 ? '' : 's'}`;
   }
 
-  // ── Init ───────────────────────────────────────────────────────
-  // Called once by ui.js after all scripts are loaded.
+  // ── Project CRUD ───────────────────────────────────────────────
+  async function loadActiveProject() {
+    try {
+      const { data, error } = await window._sb
+        .from('app_state')
+        .select('value')
+        .eq('key', 'active_project_id')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data?.value) { window.UI.showFirstRunModal(); return; }
+      await loadProject(data.value);
+    } catch (_) {
+      window.UI.showFirstRunModal();
+    }
+  }
+
+  async function loadProject(id) {
+    try {
+      const { data, error } = await window._sb
+        .from('projects')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      _deserialize(data.data);
+      state.project = { id: data.id, name: data.name, isNamed: data.is_named };
+      await window._sb
+        .from('app_state')
+        .upsert({ key: 'active_project_id', value: id });
+      if (window.Scene) window.Scene.markDirty();
+      if (window.UI)    window.UI.refresh();
+    } catch (_) {
+      window.UI.showError('Failed to load project.');
+    }
+  }
+
+  async function createFirstProject(name) {
+    try {
+      const { data, error } = await window._sb
+        .from('projects')
+        .insert({ name, is_named: false, data: _serialize(), thumbnail: null })
+        .select()
+        .single();
+      if (error) throw error;
+      state.project = { id: data.id, name: data.name, isNamed: false };
+      await window._sb
+        .from('app_state')
+        .upsert({ key: 'active_project_id', value: data.id });
+      if (window.UI) window.UI.refresh();
+    } catch (err) {
+      window.UI.showError('Failed to create project: ' + err.message);
+    }
+  }
+
+  async function saveProject(name) {
+    try {
+      const thumbnail = window.Scene ? window.Scene.getSnapshot() : null;
+      const { data, error } = await window._sb
+        .from('projects')
+        .insert({ name, is_named: true, data: _serialize(), thumbnail })
+        .select()
+        .single();
+      if (error) throw error;
+      state.project = { id: data.id, name: data.name, isNamed: true };
+      await window._sb
+        .from('app_state')
+        .upsert({ key: 'active_project_id', value: data.id });
+      if (window.UI) window.UI.refresh();
+    } catch (err) {
+      window.UI.showError('Failed to save: ' + err.message);
+    }
+  }
+
+  async function fetchNamedProjects() {
+    const { data, error } = await window._sb
+      .from('projects')
+      .select('id, name, thumbnail, updated_at')
+      .eq('is_named', true)
+      .order('updated_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function deleteProject(id) {
+    const { error } = await window._sb.from('projects').delete().eq('id', id);
+    if (error) throw error;
+    if (state.project?.id === id) {
+      state.project = null;
+      await window._sb.from('app_state').delete().eq('key', 'active_project_id');
+    }
+  }
+
+  function isCurrentProjectNamed() {
+    return state.project?.isNamed === true;
+  }
+
+  // ── Init — resets state; loadActiveProject called from UI.init ─
   function init() {
-    state.building      = [{ bx: 0, bz: 0 }];
-    state.cells         = new Map();
-    state.colors        = DEFAULT_COLOURS.map(c => ({ ...c }));
-    state.project       = null;
-    state.tool          = 'build';
-    state.selectedObject = 'cube';
+    state.building        = [{ bx: 0, bz: 0 }];
+    state.cells           = new Map();
+    state.colors          = DEFAULT_COLOURS.map(c => ({ ...c }));
+    state.project         = null;
+    state.tool            = 'build';
+    state.selectedObject  = 'cube';
     state.selectedColorId = 0;
-    state.selection     = new Set();
-    _nextColorId        = DEFAULT_COLOURS.length;
+    state.selection       = new Set();
+    _nextColorId          = DEFAULT_COLOURS.length;
   }
 
   // ── Public API ─────────────────────────────────────────────────
   window.App = {
     state,
-    setTool,
-    setSelectedObject,
-    setColor,
-    addColor,
-    updateColor,
-    deleteColor,
-    getColorHex,
-    placeCell,
-    deleteCell,
-    addToSelection,
-    removeFromSelection,
-    clearSelection,
-    deleteSelection,
-    addBlock,
-    removeBlock,
-    blockHasContent,
-    canRemoveBlock,
-    footprintLabel,
+    setTool, setSelectedObject, setColor,
+    addColor, updateColor, deleteColor, getColorHex,
+    placeCell, deleteCell,
+    addToSelection, removeFromSelection, clearSelection, deleteSelection,
+    addBlock, removeBlock, blockHasContent, canRemoveBlock, footprintLabel,
+    loadActiveProject, loadProject, createFirstProject,
+    saveProject, fetchNamedProjects, deleteProject, isCurrentProjectNamed,
     init,
   };
 

@@ -518,3 +518,152 @@ button:not(:disabled):active {
   background: none;
   padding: 2px;
 }
+
+/* ── Text input ──────────────────────────────────────────────────── */
+.text-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  color: var(--text-bright);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 10px;
+  outline: none;
+  transition: border-color 0.1s;
+}
+
+.text-input::placeholder {
+  color: var(--text-dim);
+}
+
+.text-input:focus {
+  border-color: var(--accent);
+}
+
+/* ── Locked overlay — ESC and backdrop click do not close ────────── */
+.modal-overlay--locked {
+  pointer-events: all;
+}
+
+/* ── Load project modal ──────────────────────────────────────────── */
+.modal-box--load {
+  min-width: 440px;
+  max-width: 560px;
+}
+
+.project-list {
+  max-height: 360px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+
+.project-list::-webkit-scrollbar       { width: 4px; }
+.project-list::-webkit-scrollbar-track { background: transparent; }
+.project-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.project-list-empty {
+  padding: 24px 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: center;
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.project-item:hover {
+  background: var(--panel2);
+}
+
+.project-thumbnail {
+  width: 72px;
+  height: 48px;
+  border-radius: 3px;
+  border: 1px solid var(--border2);
+  background: var(--bg);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.project-thumbnail--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 18px;
+}
+
+.project-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-item-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-item-date {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.project-item-delete {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text-dim);
+  padding: 4px 8px;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.project-item:hover .project-item-delete {
+  opacity: 1;
+}
+
+.project-item-delete:hover {
+  color: var(--danger);
+  border-color: var(--danger2) !important;
+}
+
+/* ── Error banner ────────────────────────────────────────────────── */
+.error-banner {
+  position: fixed;
+  top: calc(var(--topbar) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--danger2);
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 20px;
+  z-index: 2000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+
+.error-banner.visible {
+  opacity: 1;
+}

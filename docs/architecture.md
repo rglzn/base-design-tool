@@ -12,6 +12,7 @@ Single user, no auth, Supabase persistence, Cloudflare Pages hosting.
 - Architecture agreed. Repo, Cloudflare Pages, Supabase all live.
 - v1 preserved in git history. v2 build not yet started.
 - **Step 1** — v2 core: footprint editor, 3D scene, cube placement, Build/Delete/Select tools, colour swatches. End-to-end usable.
+- **Step 2** — Supabase: autosave, Save/Load Project, first-run modal.
 
 ### To Do
 - **Step 2** — Supabase: autosave, Save/Load Project, first-run modal.
@@ -99,4 +100,4 @@ Keys: --bg --panel --panel2 --border --border2 --accent --accent2
 
 ## Current State
 
-Step 1 complete. v1 deleted. src/ holds five fresh v2 files: index.html, style.css, app.js, scene.js, ui.js. Tool is end-to-end usable — footprint editor, 3D scene, cube placement, Build/Delete/Select tools, colour swatches. No Supabase calls yet. Next: Step 2 (Supabase persistence).
+Step 2 complete. Supabase client live (window._sb). Autosave on 2s debounce after any mutation. Save Project (named snapshot, danger modal if overwriting named save), Load Project modal with thumbnails and relative dates, First-run modal on blank state. project state shape: { id, name, isNamed }. Next: Step 3 (full object sidebar).

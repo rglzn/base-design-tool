@@ -12,7 +12,7 @@
     const viewport = document.getElementById('viewport');
 
     // Renderer
-    _renderer = new THREE.WebGLRenderer({ antialias: true });
+    _renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     _renderer.setPixelRatio(window.devicePixelRatio);
     _renderer.setClearColor(0x090b0e);
     viewport.appendChild(_renderer.domElement);
@@ -288,11 +288,19 @@
     ctx.globalAlpha = 1;
   }
 
+  // ── Snapshot for thumbnails ────────────────────────────────────
+  function getSnapshot() {
+    if (!_renderer) return null;
+    _renderer.render(_scene, _camera);
+    return _renderer.domElement.toDataURL('image/jpeg', 0.6);
+  }
+
   // ── Public API ─────────────────────────────────────────────────
   window.Scene = {
     init,
     markDirty,
     pickAt,
+    getSnapshot,
   };
 
 }());
