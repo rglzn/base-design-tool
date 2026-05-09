@@ -148,6 +148,41 @@
     });
   }
 
+  // ── Settings modal
+  function _showSettingsModal() {
+    const overlay = _openModal('tmpl-modal-settings');
+    overlay.querySelectorAll('.js-modal-close').forEach(el => el.addEventListener('click', _closeModal));
+
+    // Apply current UI scale to the modal box itself
+    const scale = App.getSettings().uiScale;
+    const box = overlay.querySelector('.modal-box');
+    if (box) box.style.zoom = scale;
+
+    const settings = App.getSettings();
+    const sliders = [
+      { id: 'settings-pan-speed',    key: 'panSpeed',    min: 0.02, max: 0.40, step: 0.01 },
+      { id: 'settings-rotate-speed', key: 'rotateSpeed', min: 0.20, max: 3.00, step: 0.05 },
+      { id: 'settings-zoom-speed',   key: 'zoomSpeed',   min: 0.20, max: 3.00, step: 0.05 },
+      { id: 'settings-ui-scale',     key: 'uiScale',     min: 0.50, max: 2.00, step: 0.05 },
+    ];
+
+    sliders.forEach(({ id, key, min, max, step }) => {
+      const input  = overlay.querySelector(`#${id}`);
+      const valEl  = overlay.querySelector(`#${id}-value`);
+      if (!input || !valEl) return;
+      input.min    = min;
+      input.max    = max;
+      input.step   = step;
+      input.value  = settings[key];
+      valEl.textContent = Number(settings[key]).toFixed(2);
+      input.addEventListener('input', () => {
+        const v = parseFloat(input.value);
+        valEl.textContent = v.toFixed(2);
+        App.saveSettings({ [key]: v });
+      });
+    });
+  }
+
   // ── Save Project modal ─────────────────────────────────────────
   function _showSaveProjectModal() {
     const overlay = _openModal('tmpl-modal-save-project');
@@ -307,6 +342,17 @@
       btn.classList.toggle('active', btn.dataset.tool === tool);
     });
     if (tool !== 'build' && window.Scene) Scene.setHoverHit(null);
+    if (window.Scene) Scene.setAreaSelectMode(tool === 'area-select' || tool === 'paint');
+  }
+
+  function _updateSelectionActions() {
+    const hasSel = App.state.selection.size > 0;
+    const inMG   = !!App.state.placingMultiGhost;
+    const isPaint = App.state.tool === 'paint';
+    document.getElementById('selection-actions')
+      .classList.toggle('visible', hasSel && !inMG);
+    const paintBtn = document.getElementById('btn-paint-selection');
+    if (paintBtn) paintBtn.style.display = (hasSel && !inMG && isPaint) ? '' : 'none';
   }
 
   function _updateObjectButtons() {
@@ -395,20 +441,138 @@
     }
   }
 
+  // ── Area select state ───────────────────────────────────────────
+  let _asDragging  = false;   // true once drag threshold exceeded
+  let _asStartX    = 0;
+  let _asStartY    = 0;
+  let _asRectEl    = null;
+
+  function _asCreateRect() {
+    const el = document.createElement('div');
+    el.className = 'area-select-rect';
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function _asUpdateRect(x1, y1, x2, y2) {
+    if (!_asRectEl) return;
+    _asRectEl.style.left   = Math.min(x1, x2) + 'px';
+    _asRectEl.style.top    = Math.min(y1, y2) + 'px';
+    _asRectEl.style.width  = Math.abs(x2 - x1) + 'px';
+    _asRectEl.style.height = Math.abs(y2 - y1) + 'px';
+  }
+
+  function _asRemoveRect() {
+    if (_asRectEl) { _asRectEl.remove(); _asRectEl = null; }
+    _asDragging = false;
+  }
+
   // ── Viewport hover (placement ghost) ──────────────────────────
+  let _lastPlacedKey = null;
+
   function _onViewportMove(e) {
     if (_currentView !== 'canvas') return;
+
+    // Multi-ghost tracking
+    if (App.state.placingMultiGhost) {
+      const hit = Scene.pickAt(e.clientX, e.clientY);
+      if (hit) {
+        // Use targetKey for ground hits, key's neighbour for solid hits
+        const refKey = hit.targetKey || hit.key;
+        if (refKey) {
+          const [gx, , gz] = refKey.split(',').map(Number);
+          Scene.setMultiGhostOrigin(gx, gz);
+        }
+      }
+      return;
+    }
+
+    if (App.state.tool === 'area-select' && (e.buttons & 1)) {
+      const dx = e.clientX - _mouseDownX;
+      const dy = e.clientY - _mouseDownY;
+      if (!_asDragging && dx * dx + dy * dy > 25) {
+        _asDragging = true;
+        _asStartX   = _mouseDownX;
+        _asStartY   = _mouseDownY;
+        _asRectEl   = _asCreateRect();
+      }
+      if (_asDragging) {
+        _asUpdateRect(_asStartX, _asStartY, e.clientX, e.clientY);
+      }
+      return;
+    }
+
     if (App.state.tool !== 'build') return;
     const hit = Scene.pickAt(e.clientX, e.clientY);
-    Scene.setHoverHit(hit);
+    if (_lastPlacedKey && hit && hit.buildTarget !== _lastPlacedKey) {
+      _lastPlacedKey = null;
+    }
+    const suppressedHit = (_lastPlacedKey && hit && hit.buildTarget === _lastPlacedKey) ? null : hit;
+    Scene.setHoverHit(suppressedHit);
   }
 
   // ── Viewport click handling ────────────────────────────────────
   let _mouseDownX = 0, _mouseDownY = 0;
 
-  function _onViewportClick(e) {
+  function _onViewportPointerDown(e) {
+    _mouseDownX = e.clientX;
+    _mouseDownY = e.clientY;
+    _asDragging = false;
+  }
+
+  function _onViewportPointerUp(e) {
     if (_currentView !== 'canvas') return;
-    if (e.target.closest('#hud')) return;
+    // Right-click (button 2) is camera rotate — never touches selection.
+    if (e.button === 2) return;
+    if (e.target.closest('#hud')) { _asRemoveRect(); return; }
+
+    // Multi-ghost click to place
+    if (App.state.placingMultiGhost) {
+      const hit = Scene.pickAt(e.clientX, e.clientY);
+      if (hit) {
+        const refKey = hit.targetKey || hit.key;
+        if (refKey) {
+          const [gx, , gz] = refKey.split(',').map(Number);
+          App.commitMultiGhost(gx, gz);
+          Scene.setMultiGhostOrigin(null, null);
+        }
+      }
+      return;
+    }
+
+    if (App.state.tool === 'area-select') {
+      if (_asDragging) {
+        const keys = Scene.selectInScreenRect(_asStartX, _asStartY, e.clientX, e.clientY);
+        _asRemoveRect();
+        if (e.shiftKey) {
+          keys.forEach(k => {
+            App.state.selection.has(k) ? App.removeFromSelection(k) : App.addToSelection(k);
+          });
+          if (keys.length) Scene.markDirty();
+        } else {
+          App.clearSelection();
+          keys.forEach(k => App.addToSelection(k));
+        }
+      } else {
+        const hit = Scene.pickAt(e.clientX, e.clientY);
+        if (hit && hit.key) {
+          if (e.shiftKey) {
+            App.state.selection.has(hit.key)
+              ? App.removeFromSelection(hit.key)
+              : App.addToSelection(hit.key);
+          } else {
+            App.clearSelection();
+            App.addToSelection(hit.key);
+          }
+        } else if (!e.shiftKey) {
+          App.clearSelection();
+        }
+      }
+      return;
+    }
+
+    _asRemoveRect();
+
     const dx = e.clientX - _mouseDownX;
     const dy = e.clientY - _mouseDownY;
     if (dx * dx + dy * dy > 25) return;
@@ -421,6 +585,7 @@
       if (hit.buildTarget) {
         const [x, y, z] = hit.buildTarget.split(',').map(Number);
         App.placeCell(x, y, z);
+        _lastPlacedKey = hit.buildTarget;
       }
     } else if (tool === 'delete') {
       if (hit.key) {
@@ -440,6 +605,10 @@
       } else if (!e.shiftKey) {
         App.clearSelection();
       }
+    } else if (tool === 'paint') {
+      if (hit.key) {
+        App.repaintCells([hit.key], App.state.selectedColorId);
+      }
     }
   }
 
@@ -449,21 +618,37 @@
 
     switch (e.key) {
       case 'b': case 'B': App.setTool('build');  break;
-      case 'd': case 'D': App.setTool('delete'); break;
-      case 's': case 'S': App.setTool('select'); break;
+      case 'r': case 'R': App.setTool('select'); break;
       case 'q': case 'Q':
-        if (_INCLINE_TYPES.has(App.state.selectedObject)) App.rotatePlaceDirection(-1);
+        if (App.state.placingMultiGhost) { App.rotateMultiGhost(-1); }
+        else if (_INCLINE_TYPES.has(App.state.selectedObject)) { App.rotatePlaceDirection(-1); Scene.markDirty(); }
         break;
       case 'e': case 'E':
-        if (_INCLINE_TYPES.has(App.state.selectedObject)) App.rotatePlaceDirection(1);
+        if (App.state.placingMultiGhost) { App.rotateMultiGhost(1); }
+        else if (_INCLINE_TYPES.has(App.state.selectedObject)) { App.rotatePlaceDirection(1); Scene.markDirty(); }
+        break;
+      case 't': case 'T':
+        if (App.state.placingMultiGhost) { App.cycleMultiGhostAnchor(); }
+        else App.setTool('delete');
+        break;
+      case 'z': case 'Z':
+        if (App.state.placingMultiGhost) { App.shiftMultiGhostLevel(1); }
+        break;
+      case 'x': case 'X':
+        if (App.state.placingMultiGhost) { App.shiftMultiGhostLevel(-1); }
         break;
       case 'Delete':
-        if (App.state.tool === 'select' && App.state.selection.size > 0)
+        if ((App.state.tool === 'select' || App.state.tool === 'area-select') && App.state.selection.size > 0)
           App.deleteSelection();
         break;
       case 'Escape':
         if (_activeModal && !_activeModal.classList.contains('modal-overlay--locked')) {
           _closeModal(); return;
+        }
+        if (App.state.placingMultiGhost) {
+          App.cancelMultiGhost();
+          Scene.setMultiGhostOrigin(null, null);
+          return;
         }
         App.clearSelection();
         break;
@@ -486,6 +671,10 @@
     document.getElementById('btn-load-project').addEventListener('click', () => {
       _showLoadProjectModal();
     });
+
+    document.getElementById('btn-settings').addEventListener('click', () => {
+      _showSettingsModal();
+    });
   }
 
   // ── Sidebar wiring ─────────────────────────────────────────────
@@ -502,6 +691,18 @@
     document.getElementById('btn-edit-footprint').addEventListener('click', () => {
       showFootprintEditor();
     });
+    document.getElementById('btn-duplicate').addEventListener('click', () => {
+      if (!App.state.selection.size) return;
+      App.startMultiGhost(false);
+    });
+    document.getElementById('btn-pick-up').addEventListener('click', () => {
+      if (!App.state.selection.size) return;
+      App.startMultiGhost(true);
+    });
+    document.getElementById('btn-paint-selection').addEventListener('click', () => {
+      if (!App.state.selection.size) return;
+      App.repaintCells([...App.state.selection], App.state.selectedColorId);
+    });
 
     document.getElementById('toggle-ghost').addEventListener('change', e => {
       App.setShowPlacementGhost(e.target.checked);
@@ -512,10 +713,10 @@
   // ── Viewport wiring ────────────────────────────────────────────
   function _wireViewport() {
     const viewport = document.getElementById('viewport');
-    viewport.addEventListener('pointerdown', e => { _mouseDownX = e.clientX; _mouseDownY = e.clientY; });
-    viewport.addEventListener('pointerup',   _onViewportClick);
-    viewport.addEventListener('pointermove', _onViewportMove);
-    viewport.addEventListener('pointerleave', () => Scene.setHoverHit(null));
+    viewport.addEventListener('pointerdown',  _onViewportPointerDown);
+    viewport.addEventListener('pointerup',    _onViewportPointerUp);
+    viewport.addEventListener('pointermove',  _onViewportMove);
+    viewport.addEventListener('pointerleave', () => { Scene.setHoverHit(null); Scene.setMultiGhostOrigin(null, null); _asRemoveRect(); });
   }
 
   // ── Footprint "Done" wiring ────────────────────────────────────
@@ -534,9 +735,30 @@
     }
     _renderSwatches();
     _updateToolButtons();
+    _updateSelectionActions();
     _updateObjectButtons();
     _updateDirectionHud();
     _updateFootprintLabel();
+  }
+
+  function applyUiScale(scale) {
+    const els = [
+      document.getElementById('sidebar'),
+      document.getElementById('topbar'),
+      document.getElementById('shortcuts-strip'),
+      document.getElementById('hud'),
+      document.getElementById('compass-canvas'),
+    ];
+    els.forEach(el => {
+      if (!el) return;
+      el.style.transformOrigin = '';
+      el.style.zoom = scale;
+    });
+    // Sidebar width: keep the grid column in sync so the viewport never overlaps
+    document.documentElement.style.setProperty('--sidebar', (264 * scale) + 'px');
+    // Scale any open settings modal
+    const modal = document.querySelector('.modal-overlay .modal-box');
+    if (modal) modal.style.zoom = scale;
   }
 
   // ── Init ───────────────────────────────────────────────────────
@@ -546,11 +768,12 @@
     _wireViewport();
     _wireFootprintDone();
     document.addEventListener('keydown', _onKeyDown);
+    applyUiScale(App.getSettings().uiScale);
     refresh();
     App.loadActiveProject(); // async — calls showFirstRunModal or loads saved project
   }
 
-  window.UI = { init, refresh, showDangerModal, showFirstRunModal, showFootprintEditor, showError };
+  window.UI = { init, refresh, showDangerModal, showFirstRunModal, showFootprintEditor, showError, applyUiScale };
 
   // ── Startup ────────────────────────────────────────────────────
   function _startup() {

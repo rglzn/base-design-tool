@@ -27,6 +27,7 @@
     <div class="topbar-actions">
       <button id="btn-save-project" class="btn-action">Save Project</button>
       <button id="btn-load-project" class="btn-action">Load Project</button>
+      <button id="btn-settings" class="btn-action btn-action--icon" title="Settings">&#9881;</button>
     </div>
   </header>
 
@@ -34,15 +35,19 @@
   <div id="shortcuts-strip">
     <span class="shortcut-pill"><span class="key">B</span> Build</span>
     <span class="shortcut-sep"></span>
-    <span class="shortcut-pill"><span class="key">D</span> Delete</span>
+    <span class="shortcut-pill"><span class="key">T</span> Delete</span>
     <span class="shortcut-sep"></span>
-    <span class="shortcut-pill"><span class="key">S</span> Select</span>
+    <span class="shortcut-pill"><span class="key">R</span> Select</span>
     <span class="shortcut-sep"></span>
     <span class="shortcut-pill"><span class="key">Q</span><span class="key">E</span> Rotate</span>
     <span class="shortcut-sep"></span>
     <span class="shortcut-pill"><span class="key">Del</span> Remove sel</span>
     <span class="shortcut-sep"></span>
     <span class="shortcut-pill"><span class="key">WASD</span> Move</span>
+    <span class="shortcut-sep"></span>
+    <span class="shortcut-pill"><span class="key">Space</span> Raise</span>
+    <span class="shortcut-sep"></span>
+    <span class="shortcut-pill"><span class="key">Ctrl</span> Lower</span>
   </div>
 
   <!-- ── Sidebar ───────────────────────────────────────────────────── -->
@@ -51,9 +56,16 @@
     <section class="sidebar-section" id="section-tools">
       <h3 class="sidebar-heading">Tools</h3>
       <div class="tool-group">
-        <button class="btn-tool" id="tool-build"   data-tool="build">Build</button>
-        <button class="btn-tool" id="tool-delete"  data-tool="delete">Delete</button>
-        <button class="btn-tool" id="tool-select"  data-tool="select">Select</button>
+        <button class="btn-tool" id="tool-build"        data-tool="build">Build</button>
+        <button class="btn-tool" id="tool-delete"       data-tool="delete">Delete</button>
+        <button class="btn-tool" id="tool-select"       data-tool="select">Select</button>
+        <button class="btn-tool" id="tool-area-select"  data-tool="area-select">Area Sel</button>
+        <button class="btn-tool" id="tool-paint"        data-tool="paint">Paint</button>
+      </div>
+      <div class="selection-actions" id="selection-actions">
+        <button class="btn-secondary btn-sm" id="btn-duplicate">Duplicate</button>
+        <button class="btn-secondary btn-sm" id="btn-pick-up">Pick Up</button>
+        <button class="btn-secondary btn-sm" id="btn-paint-selection" style="display:none">Paint</button>
       </div>
     </section>
 
@@ -67,19 +79,15 @@
       <h3 class="sidebar-heading">Objects</h3>
       <div class="object-grid">
         <button class="btn-object active" id="obj-cube" data-object="cube">
-          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-cube" /></svg>
           <span class="object-label">Cube</span>
         </button>
         <button class="btn-object" id="obj-stair-solid" data-object="stair-solid">
-          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-stair-solid" /></svg>
           <span class="object-label">Stair</span>
         </button>
         <button class="btn-object" id="obj-wedge-solid" data-object="wedge-solid">
-          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wedge-solid" /></svg>
           <span class="object-label">Wedge</span>
         </button>
         <button class="btn-object" id="obj-wedge-solid-inverted" data-object="wedge-solid-inverted">
-          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wedge-solid-inverted" /></svg>
           <span class="object-label">Wedge Inv</span>
         </button>
       </div>
@@ -222,65 +230,45 @@
     </div>
   </template>
 
+  <!-- Settings modal -->
+  <template id="tmpl-modal-settings">
+    <div class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span class="modal-title">Settings</span>
+          <button class="btn-icon js-modal-close" aria-label="Close">✕</button>
+        </div>
+        <div class="settings-sliders">
+          <div class="settings-slider-row">
+            <label class="settings-slider-label" for="settings-pan-speed">Pan speed</label>
+            <input type="range" id="settings-pan-speed" class="settings-slider" />
+            <span class="settings-slider-value" id="settings-pan-speed-value">0.12</span>
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-slider-label" for="settings-rotate-speed">Rotate speed</label>
+            <input type="range" id="settings-rotate-speed" class="settings-slider" />
+            <span class="settings-slider-value" id="settings-rotate-speed-value">1.00</span>
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-slider-label" for="settings-zoom-speed">Zoom speed</label>
+            <input type="range" id="settings-zoom-speed" class="settings-slider" />
+            <span class="settings-slider-value" id="settings-zoom-speed-value">1.00</span>
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-slider-label" for="settings-ui-scale">UI scale</label>
+            <input type="range" id="settings-ui-scale" class="settings-slider" />
+            <span class="settings-slider-value" id="settings-ui-scale-value">1.00</span>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary js-modal-close">Close</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
   <!-- ── Error banner ───────────────────────────────────────────────── -->
   <div id="error-banner" class="error-banner" role="alert" aria-live="assertive"></div>
-
-  <!-- ── SVG sprite ─────────────────────────────────────────────────── -->
-  <svg id="svg-sprite" xmlns="http://www.w3.org/2000/svg"
-       style="display:none" aria-hidden="true">
-
-    <!-- Cube: isometric three-face view -->
-    <symbol id="icon-cube" viewBox="0 0 40 40">
-      <polygon points="20,4 36,13 20,22 4,13"        fill="currentColor" opacity="0.90"/>
-      <polygon points="4,13 20,22 20,36 4,27"        fill="currentColor" opacity="0.55"/>
-      <polygon points="36,13 20,22 20,36 36,27"      fill="currentColor" opacity="0.72"/>
-    </symbol>
-
-    <!-- Stair solid: two steps rising left-to-right, isometric -->
-    <symbol id="icon-stair-solid" viewBox="0 0 40 40">
-      <!-- bottom step top face -->
-      <polygon points="4,27 20,36 20,27 4,18"        fill="currentColor" opacity="0.90"/>
-      <!-- bottom step front face (right side) -->
-      <polygon points="20,27 36,18 36,27 20,36"      fill="currentColor" opacity="0.72"/>
-      <!-- bottom step left face -->
-      <polygon points="4,18 20,27 20,36 4,27"        fill="currentColor" opacity="0.55"/>
-      <!-- top step top face -->
-      <polygon points="4,18 20,27 20,18 4,9"         fill="currentColor" opacity="0.90"/>
-      <!-- top step front riser face -->
-      <polygon points="20,18 20,27 36,18 36,9"       fill="currentColor" opacity="0.72"/>
-      <!-- top step left face -->
-      <polygon points="4,9 20,18 20,27 4,18"         fill="currentColor" opacity="0.55"/>
-    </symbol>
-
-    <!-- Wedge solid: slope rises from front-low to back-high -->
-    <symbol id="icon-wedge-solid" viewBox="0 0 40 40">
-      <!-- slope face (top-diagonal) -->
-      <polygon points="4,27 36,27 20,13 4,13"        fill="currentColor" opacity="0.90"/>
-      <!-- back face (tall vertical) -->
-      <polygon points="4,13 20,13 20,27 4,27"        fill="currentColor" opacity="0.55"/>
-      <!-- right side triangle -->
-      <polygon points="36,27 20,13 20,27"            fill="currentColor" opacity="0.72"/>
-      <!-- bottom face -->
-      <polygon points="4,27 36,27 20,36 4,36"        fill="currentColor" opacity="0.55"/>
-      <!-- right bottom -->
-      <polygon points="36,27 20,27 20,36"            fill="currentColor" opacity="0.72"/>
-    </symbol>
-
-    <!-- Wedge solid inverted: slope falls from front-high to back-low -->
-    <symbol id="icon-wedge-solid-inverted" viewBox="0 0 40 40">
-      <!-- front face (tall vertical) -->
-      <polygon points="4,13 20,4 20,27 4,27"         fill="currentColor" opacity="0.90"/>
-      <!-- slope face -->
-      <polygon points="20,4 36,13 36,27 20,27"       fill="currentColor" opacity="0.72"/>
-      <!-- top slope (triangle left) -->
-      <polygon points="4,13 20,4 20,27 4,27"         fill="currentColor" opacity="0.55"/>
-      <!-- right side triangle top -->
-      <polygon points="20,4 36,13 20,13"             fill="currentColor" opacity="0.90"/>
-      <!-- bottom -->
-      <polygon points="4,27 20,27 36,27 20,36 4,36"  fill="currentColor" opacity="0.55"/>
-    </symbol>
-
-  </svg>
 
   <!-- ── Scripts (load order: app → scene → ui) ────────────────────── -->
   <script src="app.js"></script>

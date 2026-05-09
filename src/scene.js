@@ -9,6 +9,7 @@
   let _ghostMatValid, _ghostMatInvalid;
   let _dirty = false;
   let _hoverHit = null;
+  let _mgOrigin = null;  // { x, z } integer grid cell under cursor for multi-ghost
 
   const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted']);
   const _DIR_ROT = { N: 0, E: -Math.PI / 2, S: Math.PI, W: Math.PI / 2 };
@@ -39,6 +40,8 @@
       MIDDLE: THREE.MOUSE.DOLLY,
       RIGHT:  THREE.MOUSE.ROTATE,
     };
+    _controls.zoomSpeed   = App.getSettings().zoomSpeed;
+    _controls.rotateSpeed = App.getSettings().rotateSpeed;
     _controls.update();
     _controls.addEventListener('change', markDirty);
 
@@ -67,8 +70,8 @@
     _edgeGeo      = new THREE.EdgesGeometry(_cubeGeo);
     _edgeMat      = new THREE.LineBasicMaterial({ color: 0x000000 });
     _selEdgeMat   = new THREE.LineBasicMaterial({ color: 0xf0c040 });
-    _ghostMatValid   = new THREE.MeshLambertMaterial({ color: 0x33ff66, transparent: true, opacity: 0.38, side: THREE.FrontSide });
-    _ghostMatInvalid = new THREE.MeshLambertMaterial({ color: 0xff3333, transparent: true, opacity: 0.38, side: THREE.FrontSide });
+    _ghostMatValid   = new THREE.MeshLambertMaterial({ color: 0x33ff66, transparent: true, opacity: 0.38, side: THREE.DoubleSide });
+    _ghostMatInvalid = new THREE.MeshLambertMaterial({ color: 0xff3333, transparent: true, opacity: 0.38, side: THREE.DoubleSide });
 
     _INCLINE_TYPES.forEach(type => {
       _incGeos[type]     = _makeInclineGeo(type);
@@ -100,10 +103,10 @@
     markDirty();
   }
 
-  // ── WASD pan ───────────────────────────────────────────────────
+  // ── WASD pan ──────────────────────────────────────────────────────
   function _applyWASD() {
     if (!_keys.size) return;
-    const speed   = 0.12;
+    const speed   = App.getSettings().panSpeed;
     const forward = new THREE.Vector3();
     _camera.getWorldDirection(forward);
     forward.y = 0;
@@ -111,16 +114,22 @@
     const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
     let dx = 0, dz = 0;
-    if (_keys.has('w')) { dx -= forward.x * speed; dz -= forward.z * speed; }
-    if (_keys.has('s')) { dx += forward.x * speed; dz += forward.z * speed; }
+    if (_keys.has('w')) { dx += forward.x * speed; dz += forward.z * speed; }
+    if (_keys.has('s')) { dx -= forward.x * speed; dz -= forward.z * speed; }
     if (_keys.has('a')) { dx -= right.x * speed;   dz -= right.z * speed; }
     if (_keys.has('d')) { dx += right.x * speed;   dz += right.z * speed; }
 
-    if (dx !== 0 || dz !== 0) {
+    let dy = 0;
+    if (_keys.has(' '))       dy += speed;
+    if (_keys.has('control')) dy -= speed;
+
+    if (dx !== 0 || dz !== 0 || dy !== 0) {
       _controls.target.x += dx;
       _controls.target.z += dz;
+      _controls.target.y += dy;
       _camera.position.x += dx;
       _camera.position.z += dz;
+      _camera.position.y += dy;
       markDirty();
     }
   }
@@ -182,7 +191,7 @@
       if (cell.object !== 'cube') return;
       const [x, y, z] = key.split(',').map(Number);
       const selected = App.state.selection.has(key);
-      const mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(App.getColorHex(cell.colorId)) });
+      const mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(App.getColorHex(cell.colorId)), polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
       const mesh = new THREE.Mesh(_cubeGeo, mat);
       mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
       mesh.userData.key    = key;
@@ -209,29 +218,51 @@
     }
 
     if (type === 'wedge-solid-inverted') {
-      // High at front (+z), low at back (-z) — mirror of wedge-solid
-      t([-0.5,-0.5,-0.5],[-0.5, 0.5, 0.5],[-0.5,-0.5, 0.5]);
-      t([ 0.5,-0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5,-0.5,-0.5]);
-      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]);
-      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5,-0.5, 0.5],[-0.5,-0.5, 0.5]);
-      q([-0.5,-0.5, 0.5],[-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5,-0.5, 0.5]);
+      t([-0.5,+0.5,+0.5], [-0.5,-0.5,-0.5], [-0.5,+0.5,-0.5]);          // left tri
+      t([+0.5,+0.5,-0.5], [+0.5,-0.5,-0.5], [+0.5,+0.5,+0.5]);          // right tri
+      q([-0.5,+0.5,+0.5], [+0.5,+0.5,+0.5], [+0.5,-0.5,-0.5], [-0.5,-0.5,-0.5]); // slope
+      q([-0.5,+0.5,+0.5], [+0.5,+0.5,+0.5], [+0.5,+0.5,-0.5], [-0.5,+0.5,-0.5]); // top flat
+      q([-0.5,+0.5,-0.5], [+0.5,+0.5,-0.5], [+0.5,-0.5,-0.5], [-0.5,-0.5,-0.5]); // back
     }
 
     if (type === 'stair-solid') {
-      q([-0.5, 0.5, 0  ],[ 0.5, 0.5, 0  ],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]);
-      q([-0.5, 0,   0  ],[ 0.5, 0,   0  ],[ 0.5, 0.5, 0  ],[-0.5, 0.5, 0  ]);
-      q([-0.5, 0,   0.5],[ 0.5, 0,   0.5],[ 0.5, 0,   0  ],[-0.5, 0,   0  ]);
-      t([-0.5,-0.5,-0.5],[-0.5,-0.5, 0.5],[-0.5, 0,   0.5]);
-      t([-0.5,-0.5,-0.5],[-0.5, 0,   0.5],[-0.5, 0,   0  ]);
-      t([-0.5,-0.5,-0.5],[-0.5, 0,   0  ],[-0.5, 0.5, 0  ]);
-      t([-0.5,-0.5,-0.5],[-0.5, 0.5, 0  ],[-0.5, 0.5,-0.5]);
-      t([ 0.5,-0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0  ]);
-      t([ 0.5,-0.5,-0.5],[ 0.5, 0.5, 0  ],[ 0.5, 0,   0  ]);
-      t([ 0.5,-0.5,-0.5],[ 0.5, 0,   0  ],[ 0.5, 0,   0.5]);
-      t([ 0.5,-0.5,-0.5],[ 0.5, 0,   0.5],[ 0.5,-0.5, 0.5]);
-      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5,-0.5, 0.5],[-0.5,-0.5, 0.5]);
-      q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]);
-      q([-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5, 0,   0.5],[-0.5, 0,   0.5]);
+      // 8 uniform steps rising from front (+z) to back (-z).
+      // Cell occupies x: [-0.5,0.5], y: [-0.5,0.5], z: [-0.5,0.5].
+      // Each step: depth = 1/8 along z, height = 1/8 along y.
+      const N  = 8;
+      const sd = 1 / N;
+      const sh = 1 / N;
+      // Bottom face
+      q([-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5,-0.5,-0.5],[-0.5,-0.5,-0.5]);
+      // Back face (z = -0.5): full rectangle
+      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]);
+      // Treads and risers.
+      for (let i = 0; i < N; i++) {
+        const z0 =  0.5 - i * sd;
+        const z1 =  0.5 - (i + 1) * sd;
+        const yB = -0.5 + i * sh;
+        const yT = -0.5 + (i + 1) * sh;
+        // Riser: normal toward +Z. CCW from +Z: BL→BR→TR, BL→TR→TL.
+        t([-0.5, yB, z0], [ 0.5, yB, z0], [ 0.5, yT, z0]);
+        t([-0.5, yB, z0], [ 0.5, yT, z0], [-0.5, yT, z0]);
+        // Tread: normal toward +Y. CCW from +Y: FL→FR→BR, FL→BR→BL.
+        t([-0.5, yT, z0], [ 0.5, yT, z0], [ 0.5, yT, z1]);
+        t([-0.5, yT, z0], [ 0.5, yT, z1], [-0.5, yT, z1]);
+      }
+      // Left side (x = -0.5): one quad per step, y=-0.5 to tread top, normal toward -X.
+      for (let i = 0; i < N; i++) {
+        const z0 =  0.5 - i * sd;
+        const z1 =  0.5 - (i + 1) * sd;
+        const yT = -0.5 + (i + 1) * sh;
+        q([-0.5,-0.5, z0],[-0.5,-0.5, z1],[-0.5, yT, z1],[-0.5, yT, z0]);
+      }
+      // Right side (x = +0.5): mirror, normal toward +X.
+      for (let i = 0; i < N; i++) {
+        const z0 =  0.5 - i * sd;
+        const z1 =  0.5 - (i + 1) * sd;
+        const yT = -0.5 + (i + 1) * sh;
+        q([ 0.5,-0.5, z1],[ 0.5,-0.5, z0],[ 0.5, yT, z0],[ 0.5, yT, z1]);
+      }
     }
 
     const geo = new THREE.BufferGeometry();
@@ -251,7 +282,10 @@
       const selected = App.state.selection.has(key);
       const mat = new THREE.MeshLambertMaterial({
         color: new THREE.Color(App.getColorHex(cell.colorId)),
-        side:  THREE.FrontSide,
+        side:  THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
       });
       const mesh = new THREE.Mesh(_incGeos[cell.object], mat);
       mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
@@ -321,6 +355,33 @@
 
   function _rebuildGhost() {
     _ghostGroup.clear();
+
+    // ── Multi-ghost ────────────────────────────────────────────────
+    const mg = App.state.placingMultiGhost;
+    if (mg && _mgOrigin) {
+      const targets = App.getMultiGhostTargets(_mgOrigin.x, _mgOrigin.z);
+      const valid   = App.multiGhostValid(_mgOrigin.x, _mgOrigin.z);
+      const mat     = valid ? _ghostMatValid : _ghostMatInvalid;
+      if (targets) {
+        targets.forEach(({ key, cell }) => {
+          const [x, y, z] = key.split(',').map(Number);
+          let mesh;
+          if (cell.object === 'cube') {
+            mesh = new THREE.Mesh(_cubeGeo, mat);
+          } else if (_INCLINE_TYPES.has(cell.object)) {
+            mesh = new THREE.Mesh(_incGeos[cell.object], mat);
+            mesh.rotation.y = _DIR_ROT[cell.direction] ?? 0;
+          } else {
+            return;
+          }
+          mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+          _ghostGroup.add(mesh);
+        });
+      }
+      return;
+    }
+
+    // ── Single placement ghost ──────────────────────────────────────
     if (!App.state.showPlacementGhost) return;
     if (App.state.tool !== 'build') return;
     if (!_hoverHit) return;
@@ -406,6 +467,38 @@
     });
   }
 
+  // ── Area select — project all cells to screen, return keys within rect ──
+  /*
+   * screenX1/Y1, screenX2/Y2 are client-space corners (order doesn't matter).
+   * Returns an array of cell keys whose centre projects within the rectangle.
+   * Occlusion is intentionally ignored — we project world→NDC→screen only.
+   */
+  function selectInScreenRect(screenX1, screenY1, screenX2, screenY2) {
+    if (!_renderer || !_camera) return [];
+
+    const rect = _renderer.domElement.getBoundingClientRect();
+    const minX = Math.min(screenX1, screenX2);
+    const maxX = Math.max(screenX1, screenX2);
+    const minY = Math.min(screenY1, screenY2);
+    const maxY = Math.max(screenY1, screenY2);
+
+    const result = [];
+    const v = new THREE.Vector3();
+
+    App.state.cells.forEach((_cell, key) => {
+      const [x, y, z] = key.split(',').map(Number);
+      v.set(x + 0.5, y + 0.5, z + 0.5);
+      v.project(_camera);
+      const sx = (v.x * 0.5 + 0.5) * rect.width  + rect.left;
+      const sy = (-v.y * 0.5 + 0.5) * rect.height + rect.top;
+      if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) {
+        result.push(key);
+      }
+    });
+
+    return result;
+  }
+
   // ── Snapshot for thumbnails ────────────────────────────────────
   function getSnapshot() {
     if (!_renderer) return null;
@@ -413,6 +506,25 @@
     return _renderer.domElement.toDataURL('image/jpeg', 0.6);
   }
 
-  window.Scene = { init, markDirty, pickAt, setHoverHit, getSnapshot };
+  function setMultiGhostOrigin(x, z) {
+    _mgOrigin = (x === null) ? null : { x, z };
+    markDirty();
+  }
+
+  function applySettings(settings) {
+    if (!_controls) return;
+    if (settings.zoomSpeed   !== undefined) _controls.zoomSpeed   = settings.zoomSpeed;
+    if (settings.rotateSpeed !== undefined) _controls.rotateSpeed = settings.rotateSpeed;
+    // panSpeed is read live in _applyWASD and OrbitControls pan uses its own internal factor;
+    // for left-drag pan speed, scale via panSpeed setting applied through a multiplier.
+    markDirty();
+  }
+
+  function setAreaSelectMode(active) {
+    if (!_controls) return;
+    _controls.mouseButtons.LEFT = active ? THREE.MOUSE.NONE : THREE.MOUSE.PAN;
+  }
+
+  window.Scene = { init, markDirty, pickAt, setHoverHit, setMultiGhostOrigin, getSnapshot, selectInScreenRect, applySettings, setAreaSelectMode };
 
 }());

@@ -15,13 +15,24 @@ Single user, no auth, Supabase persistence, Cloudflare Pages hosting.
 - **Step 2** — Supabase: autosave, Save/Load Project, first-run modal.
 - **Step 3** — Simplify + rework startup flow. Remove walls, floors, thin inclines. Solid objects only (cube, stair-solid, wedge-solid, wedge-solid-inverted). Inline footprint builder replaces modal. Load-or-new startup screen replaces first-run modal. Face-only raycasting.
 - **Step 3.1** — Bug fixes and polish: load-or-new on every F5; Select tool with yellow highlight; left-drag pan / right-drag rotate / WASD pan; placement ghost (showPlacementGhost toggle); wedge-solid-inverted type + geometry + SVG; corrected stair/wedge SVGs; shortcuts strip; X-ray moved to View sidebar section; N/S/E/W 2D compass; landclaim boundary grid lines.
+- **Step 4** — Full object sidebar: all four types, SVG thumbnails, Q/E HUD. Fixed duplicate polygon in wedge-solid-inverted icon.
+- **Step 5a** — Bug fixes (scene.js): z-fighting edge lines, inverted wedge geometry (vertically flipped), 8-step stair geometry.
+- **Step 5b** — Bug fixes (ui.js + scene.js): stale render on hotkey rotation, W/S camera swap, remap R=Select/T=Delete, shortcuts strip update, red ghost suppression on placement, remove SVG sprite and switch object buttons to text-only.
+- **Step 5c** — Area Select tool: new tool in sidebar after Select (Build → Delete → Select → Area Select). Left-drag draws 2D rect overlay; on mouse-up selects all pieces whose cell falls within the rect including occluded pieces. Click without drag = single select. Shift+click/drag adds/removes. Shares selection state with Select tool.
+- **Step 5e** — Bug fixes + settings: (1) Area Select left-drag must not pan — only rect-select; (2) right-click must not deselect when objects are selected; (3) kill autosave entirely — save only on explicit Save Project click; (4) Settings modal (top bar, next to Save Project): three sliders — Pan speed (left-drag + WASD), Rotate speed (right-drag), Zoom speed (scroll). (ui.js, scene.js, app.js)
+- **Step 5e.1** — Settings modal fixes: overflow/clipping fix; UI Scale slider (0.5–2.0, default 1.0) scales sidebar, panels, text, compass, HUD, shortcuts strip — not the 3D viewport. Persists in localStorage.
+- **Step 5d** — Multi-ghost: Duplicate and Pick Up actions in sidebar. Ghost follows cursor, Q/E rotates 90°, T cycles anchor corner through 4 footprint corners, Z/X shifts ghost up/down one level. Occupied cells silently skipped on placement; ghost red only when every target cell is occupied. On placement, placed pieces become active selection. ESC cancels; Pick Up restores originals on ESC.
+- **Step 5f** — Multi-ghost fixes: Z/X level shifting, skip occupied on placement, post-placement selection.
 
-### To Do 
-- **Step 4** — Full object sidebar: all four types, SVG thumbnails, Q/E HUD.
-- **Step 5** — Stamps: select → save → place, R/T modifiers, red ghost when blocked.
-- **Step 6** — Perimeter selection (F key).
-- **Step 7** — X-ray toggle.
-- **Step 8** — Clear all (destructive modal).
+### To Do
+<!-- Step sizing rule: each step should touch ≤3 files and <=5 fixes/features and be completable in one focused session. If a planned step touches more, split it before greenlighting. Prefer narrow correctness over broad ambition. -->
+- **Step 5g** — Paint tool: new tool in sidebar after Area Select (Build → Delete → Select → Area Select → Paint). Click any placed piece to repaint it to the active colour swatch. With ≥1 pieces selected, a Paint button in the sidebar repaints the whole selection to the active colour. (app.js, ui.js, scene.js)
+- **Step 6** — Stamps: creation: select region, name it, save to Supabase. (app.js, ui.js)
+- **Step 7** — Stamps: placement: ghost preview, Q/E rotation, T anchor-corner cycling, red-if-blocked. Reuses multi-ghost infrastructure from 5d. (scene.js, ui.js, app.js)
+- **Step 8** — Perimeter selection (F key).
+- **Step 9** — X-ray toggle.
+- **Step 10** — Clear all (destructive modal).
+- **Step 11** — Hotkey strip rework: fully dynamic display based on active tool and selected object type. Resolves all known info-bar conflicts.
 
 ---
 
@@ -38,12 +49,13 @@ Single user, no auth, Supabase persistence, Cloudflare Pages hosting.
 
 ```
 base_planner/
-├── CLAUDE.md
 ├── docs/
-│   ├── architecture.md   ← this file, always read
+│   ├── architecture.md   ← this file, always read first
+│   ├── architect.md      ← Architect role rules (this Desktop chat)
+│   ├── dev.md            ← Dev role rules (fresh Desktop chat per step)
 │   ├── spec.md           ← deep reference, read sections as needed
 │   ├── v1-reference.png  ← visual reference for v2
-│   └── v1-reference.html  ← html reference for v2
+│   └── v1-reference.html ← html reference for v2
 └── src/
     ├── index.html        ← shell, CDN tags
     ├── style.css         ← all styles
@@ -102,4 +114,4 @@ Never hardcode colours. Full values in spec.md § CSS.
 ## Current State
 <!-- Keep ≤5 sentences: (a) last completed step, (b) what is broken and why, (c) what current step must accomplish. -->
 
-Step 3.1 complete. All four object types work (cube, stair-solid, wedge-solid, wedge-solid-inverted). Load-or-new screen appears on every F5. Select tool shows yellow edge highlight. Camera is left-drag pan / right-drag rotate with WASD pan. Placement ghost, shortcuts strip, View section, N/S/E/W compass, and landclaim grid all implemented. Codebase is clean and ready for Step 4.
+Steps 5a–5g prerequisites all complete (5a, 5b, 5c, 5d, 5e, 5e.1, 5f). Multi-ghost, Area Select, settings modal, and UI scale all done. Next step is 5g — Paint tool.

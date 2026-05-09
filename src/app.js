@@ -32,6 +32,7 @@
     selectedColorId:    0,
     selection:          new Set(),
     showPlacementGhost: true,
+    placingMultiGhost:  null,   // null | { cells, anchorIdx, rotation, pickUpKeys }
   };
 
   // Supabase client
@@ -40,34 +41,10 @@
   // ── Internal helpers ───────────────────────────────────────────
   function _markDirty() {
     if (window.Scene) window.Scene.markDirty();
-    _scheduleAutosave();
   }
 
   function _refreshUI() {
     if (window.UI) window.UI.refresh();
-  }
-
-  // ── Autosave ───────────────────────────────────────────────────
-  function _scheduleAutosave() {
-    if (!state.project) return;
-    clearTimeout(_autosaveTimer);
-    _autosaveTimer = setTimeout(_autosave, 2000);
-  }
-
-  async function _autosave() {
-    if (!state.project) return;
-    try {
-      const thumbnail = window.Scene ? window.Scene.getSnapshot() : null;
-      await window._sb.from('projects').upsert({
-        id:       state.project.id,
-        name:     state.project.name,
-        is_named: state.project.isNamed,
-        data:     _serialize(),
-        thumbnail,
-      }, { onConflict: 'id' });
-    } catch (_) {
-      // autosave is silent — spec: "no indicator shown"
-    }
   }
 
   // ── Serialise / deserialise ────────────────────────────────────
@@ -98,6 +75,7 @@
     state.selectedObject     = 'cube';
     state.placeDirection     = 'N';
     state.showPlacementGhost = true;
+    state.placingMultiGhost  = null;
   }
 
   // ── Tool / object / colour ─────────────────────────────────────
@@ -138,7 +116,6 @@
   function addColor(hex) {
     const id = _nextColorId++;
     state.colors.push({ id, hex });
-    _scheduleAutosave();
     _refreshUI();
     return id;
   }
@@ -201,6 +178,15 @@
   function deleteSelection() {
     state.selection.forEach(key => state.cells.delete(key));
     state.selection.clear();
+    _markDirty();
+    _refreshUI();
+  }
+
+  function repaintCells(keys, colorId) {
+    keys.forEach(key => {
+      const cell = state.cells.get(key);
+      if (cell) cell.colorId = colorId;
+    });
     _markDirty();
     _refreshUI();
   }
@@ -370,6 +356,171 @@
     return state.project?.isNamed === true;
   }
 
+  // ── Multi-ghost ────────────────────────────────────────────────
+  /*
+   * placingMultiGhost shape:
+   *   cells:      [{ dx, dy, dz, object, direction, colorId }]  offsets from normalised origin
+   *   anchorIdx:  0-3 — which bounding-box corner snaps to cursor
+   *   rotation:   0-3 (×90° CW around Y)
+   *   pickUpKeys: [{ key, cell }] snapshots to restore on ESC, or null for Duplicate
+   */
+  function startMultiGhost(pickUp) {
+    if (!state.selection.size) return;
+
+    const keys      = [...state.selection];
+    const snapshots = keys.map(k => ({ key: k, cell: { ...state.cells.get(k) } }));
+    const coords    = keys.map(k => k.split(',').map(Number));
+
+    const minX = Math.min(...coords.map(c => c[0]));
+    const minY = Math.min(...coords.map(c => c[1]));
+    const minZ = Math.min(...coords.map(c => c[2]));
+
+    const cells = keys.map((k, i) => {
+      const [x, y, z] = coords[i];
+      return { dx: x - minX, dy: y - minY, dz: z - minZ, ...state.cells.get(k) };
+    });
+
+    if (pickUp) {
+      keys.forEach(k => state.cells.delete(k));
+      state.selection.clear();
+      _markDirty();
+    } else {
+      state.selection.clear();
+    }
+
+    state.placingMultiGhost = {
+      cells,
+      anchorIdx:  0,
+      rotation:   0,
+      pickUpKeys: pickUp ? snapshots : null,
+    };
+    _refreshUI();
+  }
+
+  function cancelMultiGhost() {
+    if (!state.placingMultiGhost) return;
+    const { pickUpKeys } = state.placingMultiGhost;
+    state.placingMultiGhost = null;
+    if (pickUpKeys) {
+      pickUpKeys.forEach(({ key, cell }) => state.cells.set(key, cell));
+      _markDirty();
+    }
+    _refreshUI();
+    if (window.Scene) window.Scene.markDirty();
+  }
+
+  function commitMultiGhost(originX, originZ) {
+    const mg = state.placingMultiGhost;
+    if (!mg) return false;
+    const targets = _multiGhostTargets(mg, originX, originZ);
+    if (!targets) return false;
+    const placedKeys = [];
+    targets.forEach(({ key, cell }) => {
+      if (state.cells.has(key)) return;
+      const [x, , z] = key.split(',').map(Number);
+      if (!_inFootprint(x, z)) return;
+      state.cells.set(key, cell);
+      placedKeys.push(key);
+    });
+    if (!placedKeys.length) return false;
+    state.placingMultiGhost = null;
+    state.selection = new Set(placedKeys);
+    _markDirty();
+    _refreshUI();
+    return true;
+  }
+
+  function rotateMultiGhost(delta) {
+    const mg = state.placingMultiGhost;
+    if (!mg) return;
+    mg.rotation = (mg.rotation + delta + 4) % 4;
+    if (window.Scene) window.Scene.markDirty();
+  }
+
+  function shiftMultiGhostLevel(delta) {
+    const mg = state.placingMultiGhost;
+    if (!mg) return;
+    const minDY = Math.min(...mg.cells.map(c => c.dy));
+    if (delta < 0 && minDY + delta < 0) return;
+    mg.cells.forEach(c => { c.dy += delta; });
+    if (window.Scene) window.Scene.markDirty();
+  }
+
+  function cycleMultiGhostAnchor() {
+    const mg = state.placingMultiGhost;
+    if (!mg) return;
+    mg.anchorIdx = (mg.anchorIdx + 1) % 4;
+    if (window.Scene) window.Scene.markDirty();
+  }
+
+  /*
+   * Rotation: CW 90° per step around Y: (dx, dz) → (dz, -dx).
+   * Anchor corners (after rotation, XZ bounding box):
+   *   0 = (rxMin, rzMin)  1 = (rxMax, rzMin)
+   *   2 = (rxMax, rzMax)  3 = (rxMin, rzMax)
+   */
+  function _multiGhostTargets(mg, originX, originZ) {
+    if (!mg) return null;
+    const { cells, anchorIdx, rotation } = mg;
+
+    const rotated = cells.map(c => {
+      let dx = c.dx, dz = c.dz;
+      for (let r = 0; r < rotation; r++) { const t = dx; dx = dz; dz = -t; }
+      return { ...c, rdx: dx, rdz: dz };
+    });
+
+    const rxMin = Math.min(...rotated.map(c => c.rdx));
+    const rxMax = Math.max(...rotated.map(c => c.rdx));
+    const rzMin = Math.min(...rotated.map(c => c.rdz));
+    const rzMax = Math.max(...rotated.map(c => c.rdz));
+
+    const corners = [[rxMin, rzMin], [rxMax, rzMin], [rxMax, rzMax], [rxMin, rzMax]];
+    const [anchorDX, anchorDZ] = corners[anchorIdx];
+
+    return rotated.map(c => ({
+      key:  `${originX + c.rdx - anchorDX},${c.dy},${originZ + c.rdz - anchorDZ}`,
+      cell: { object: c.object, direction: c.direction, colorId: c.colorId },
+    }));
+  }
+
+  function multiGhostValid(originX, originZ) {
+    const mg = state.placingMultiGhost;
+    if (!mg) return false;
+    const targets = _multiGhostTargets(mg, originX, originZ);
+    if (!targets || !targets.length) return false;
+    // Valid if at least one target cell is free and in-footprint
+    return targets.some(({ key }) => {
+      if (state.cells.has(key)) return false;
+      const [x, , z] = key.split(',').map(Number);
+      return _inFootprint(x, z);
+    });
+  }
+
+  function getMultiGhostTargets(originX, originZ) {
+    return _multiGhostTargets(state.placingMultiGhost, originX, originZ);
+  }
+
+  // ── Settings ─────────────────────────────────────────────────────
+  const _SETTINGS_KEY = 'bdt_settings';
+  const _SETTINGS_DEFAULTS = { panSpeed: 0.15, rotateSpeed: 1.00, zoomSpeed: 1.00, uiScale: 1.0 };
+
+  function getSettings() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(_SETTINGS_KEY) || 'null');
+      return Object.assign({}, _SETTINGS_DEFAULTS, stored || {});
+    } catch (_) {
+      return Object.assign({}, _SETTINGS_DEFAULTS);
+    }
+  }
+
+  function saveSettings(patch) {
+    const current = getSettings();
+    const updated = Object.assign(current, patch);
+    try { localStorage.setItem(_SETTINGS_KEY, JSON.stringify(updated)); } catch (_) {}
+    if (window.Scene) window.Scene.applySettings(updated);
+    if (patch.uiScale !== undefined && window.UI) window.UI.applyUiScale(updated.uiScale);
+  }
+
   // ── Init ───────────────────────────────────────────────────────
   function init() {
     state.building        = [{ bx: 0, bz: 0 }];
@@ -381,6 +532,7 @@
     state.placeDirection  = 'N';
     state.selectedColorId = 0;
     state.selection       = new Set();
+    state.placingMultiGhost = null;
     _nextColorId          = DEFAULT_COLOURS.length;
   }
 
@@ -390,10 +542,13 @@
     setTool, setSelectedObject, setPlaceDirection, rotatePlaceDirection, setColor, setShowPlacementGhost,
     addColor, updateColor, deleteColor, getColorHex,
     placeCell, deleteCell,
-    addToSelection, removeFromSelection, clearSelection, deleteSelection,
+    addToSelection, removeFromSelection, clearSelection, deleteSelection, repaintCells,
+    startMultiGhost, cancelMultiGhost, commitMultiGhost,
+    rotateMultiGhost, cycleMultiGhostAnchor, shiftMultiGhostLevel, multiGhostValid, getMultiGhostTargets,
     addBlock, removeBlock, blockHasContent, canRemoveBlock, footprintLabel,
     loadActiveProject, loadProject, createFirstProject,
     saveProject, fetchNamedProjects, deleteProject, isCurrentProjectNamed,
+    getSettings, saveSettings,
     init,
   };
 
