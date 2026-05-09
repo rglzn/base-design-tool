@@ -22,6 +22,7 @@
     // persisted
     building:        [{ bx: 0, bz: 0 }],
     cells:           new Map(),
+    walls:           new Map(),
     colors:          DEFAULT_COLOURS.map(c => ({ ...c })),
     project:         null,   // { id, name, isNamed }
 
@@ -77,7 +78,10 @@
         const [x, y, z] = key.split(',').map(Number);
         return { x, y, z, object: cell.object, direction: cell.direction, colorId: cell.colorId };
       }),
-      walls:  [],
+      walls: [...state.walls.entries()].map(([key, wall]) => {
+        const [x, y, z, edge] = key.split(',');
+        return { x: +x, y: +y, z: +z, edge, type: wall.type, colorId: wall.colorId };
+      }),
       colors: state.colors,
     };
   }
@@ -89,9 +93,14 @@
     (data.cells || []).forEach(({ x, y, z, object, direction, colorId }) => {
       state.cells.set(`${x},${y},${z}`, { object, direction, colorId });
     });
+    state.walls    = new Map();
+    (data.walls || []).forEach(({ x, y, z, edge, type, colorId }) => {
+      state.walls.set(`${x},${y},${z},${edge}`, { type, colorId });
+    });
     state.colors  = data.colors || DEFAULT_COLOURS.map(c => ({ ...c }));
     _nextColorId  = state.colors.reduce((m, c) => Math.max(m, c.id), -1) + 1;
     state.selectedColorId = state.colors[0]?.id ?? 0;
+    state.walls           = new Map();
     state.selection       = new Set();
     state.tool            = 'build';
     state.selectedObject  = 'cube';
@@ -171,6 +180,24 @@
       direction: isIncline ? state.placeDirection : null,
       colorId:   state.selectedColorId,
     });
+    _markDirty();
+    return true;
+  }
+
+  // ── Wall placement ─────────────────────────────────────────────
+  // wallKey is canonical: "x,y,z,N" or "x,y,z,W"
+  function placeWall(wallKey) {
+    if (state.walls.has(wallKey)) return false;
+    const [x, y, z] = wallKey.split(',').map(Number);
+    if (!_inFootprint(x, z)) return false;
+    state.walls.set(wallKey, { type: state.selectedObject, colorId: state.selectedColorId });
+    _markDirty();
+    return true;
+  }
+
+  function deleteWall(wallKey) {
+    if (!state.walls.has(wallKey)) return false;
+    state.walls.delete(wallKey);
     _markDirty();
     return true;
   }
@@ -258,6 +285,12 @@
         if (Math.floor(cx / 10) === bx && Math.floor(cz / 10) === bz) {
           state.cells.delete(key);
           state.selection.delete(key);
+        }
+      }
+      for (const key of [...state.walls.keys()]) {
+        const [wx, , wz] = key.split(',').map(Number);
+        if (Math.floor(wx / 10) === bx && Math.floor(wz / 10) === bz) {
+          state.walls.delete(key);
         }
       }
     }
@@ -377,6 +410,7 @@
   function init() {
     state.building        = [{ bx: 0, bz: 0 }];
     state.cells           = new Map();
+    state.walls           = new Map();
     state.colors          = DEFAULT_COLOURS.map(c => ({ ...c }));
     state.project         = null;
     state.tool            = 'build';
@@ -392,7 +426,7 @@
     state,
     setTool, setSelectedObject, setPlaceDirection, rotatePlaceDirection, setColor,
     addColor, updateColor, deleteColor, getColorHex,
-    placeCell, deleteCell,
+    placeCell, deleteCell, placeWall, deleteWall,
     addToSelection, removeFromSelection, clearSelection, deleteSelection,
     addBlock, removeBlock, blockHasContent, canRemoveBlock, footprintLabel,
     loadActiveProject, loadProject, createFirstProject,

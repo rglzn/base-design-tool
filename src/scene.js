@@ -2,10 +2,13 @@
 (function () {
 
   let _renderer, _scene, _camera, _controls;
-  let _groundGroup, _cubeGroup;
+  let _groundGroup, _cubeGroup, _wallGroup;
   let _groundPlane;          // invisible, raycasting target at y=0
   let _cubeGeo, _edgeGeo, _edgeMat;
+  let _wallNGeo, _wallWGeo, _wallNEdgeGeo, _wallWEdgeGeo;
   let _dirty = false;
+
+  const _WALL_TYPES = new Set(['wall-plain', 'wall-window', 'wall-doorway']);
 
   // ── Init ───────────────────────────────────────────────────────
   function init() {
@@ -47,8 +50,10 @@
     // Groups
     _groundGroup = new THREE.Group();
     _cubeGroup   = new THREE.Group();
+    _wallGroup   = new THREE.Group();
     _scene.add(_groundGroup);
     _scene.add(_cubeGroup);
+    _scene.add(_wallGroup);
 
     // Invisible ground plane for raycasting
     const planeGeo = new THREE.PlaneGeometry(2000, 2000);
@@ -58,10 +63,14 @@
     _groundPlane.userData.isGround = true;
     _scene.add(_groundPlane);
 
-    // Shared cube geometry (never disposed)
-    _cubeGeo  = new THREE.BoxGeometry(1, 1, 1);
-    _edgeGeo  = new THREE.EdgesGeometry(_cubeGeo);
-    _edgeMat  = new THREE.LineBasicMaterial({ color: 0x000000 });
+    // Shared geometries (never disposed)
+    _cubeGeo      = new THREE.BoxGeometry(1, 1, 1);
+    _edgeGeo      = new THREE.EdgesGeometry(_cubeGeo);
+    _edgeMat      = new THREE.LineBasicMaterial({ color: 0x000000 });
+    _wallNGeo     = new THREE.BoxGeometry(1, 1, 0.06);   // N-edge wall: thin in Z
+    _wallWGeo     = new THREE.BoxGeometry(0.06, 1, 1);   // W-edge wall: thin in X
+    _wallNEdgeGeo = new THREE.EdgesGeometry(_wallNGeo);
+    _wallWEdgeGeo = new THREE.EdgesGeometry(_wallWGeo);
 
     // Resize
     new ResizeObserver(_resize).observe(viewport);
@@ -103,6 +112,7 @@
   function _rebuild() {
     _rebuildGround();
     _rebuildCubes();
+    _rebuildWalls();
   }
 
   // ── Ground grid ────────────────────────────────────────────────
@@ -158,6 +168,55 @@
     });
   }
 
+  // ── Wall meshes ────────────────────────────────────────────────
+  function _rebuildWalls() {
+    _wallGroup.traverse(obj => {
+      if (obj.isMesh && obj.material) obj.material.dispose();
+    });
+    _wallGroup.clear();
+
+    App.state.walls.forEach((wall, key) => {
+      const parts = key.split(',');
+      const x = +parts[0], y = +parts[1], z = +parts[2], edge = parts[3];
+      const isN  = edge === 'N';
+      const geo  = isN ? _wallNGeo : _wallWGeo;
+      const eGeo = isN ? _wallNEdgeGeo : _wallWEdgeGeo;
+
+      const color = new THREE.Color(App.getColorHex(wall.colorId));
+      const mat   = new THREE.MeshLambertMaterial({ color });
+      const mesh  = new THREE.Mesh(geo, mat);
+
+      mesh.position.set(
+        isN ? x + 0.5 : x,
+        y + 0.5,
+        isN ? z : z + 0.5
+      );
+      mesh.userData.isWall  = true;
+      mesh.userData.wallKey = key;
+      mesh.add(new THREE.LineSegments(eGeo, _edgeMat));
+
+      if (wall.type === 'wall-window' || wall.type === 'wall-doorway') {
+        const darker    = color.clone().multiplyScalar(0.6);
+        const insetMat  = new THREE.MeshLambertMaterial({ color: darker, side: THREE.DoubleSide });
+        const isWindow  = wall.type === 'wall-window';
+        const insetW    = isWindow ? 0.5 : 0.4;
+        const insetH    = isWindow ? 0.5 : 0.85;
+        const insetOffY = isWindow ? 0   : -0.075; // doorway: bottom-aligned
+        const inset     = new THREE.Mesh(new THREE.PlaneGeometry(insetW, insetH), insetMat);
+        inset.position.y = insetOffY;
+        if (isN) {
+          inset.position.z = -0.04; // offset toward exterior (north)
+        } else {
+          inset.rotation.y  = Math.PI / 2;
+          inset.position.x  = -0.04; // offset toward exterior (west)
+        }
+        mesh.add(inset);
+      }
+
+      _wallGroup.add(mesh);
+    });
+  }
+
   // ── Raycasting ─────────────────────────────────────────────────
   /*
    * Returns null on miss.
@@ -179,7 +238,19 @@
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, _camera);
 
-    // Cubes first (non-recursive — outlines are children, not needed here)
+    // Walls first (non-recursive — skip child lines/insets)
+    const wallHits = ray.intersectObjects(_wallGroup.children, false);
+    if (wallHits.length > 0) {
+      const hit     = wallHits[0];
+      const wallKey = hit.object.userData.wallKey;
+      const normal  = hit.face.normal
+        .clone()
+        .transformDirection(hit.object.matrixWorld)
+        .round();
+      return { type: 'wall', key: wallKey, normal, buildTarget: null };
+    }
+
+    // Cubes (non-recursive — outlines are children, not needed here)
     const cubeHits = ray.intersectObjects(_cubeGroup.children, false);
     if (cubeHits.length > 0) {
       const hit  = cubeHits[0];
@@ -191,12 +262,23 @@
         .transformDirection(hit.object.matrixWorld)
         .round();
 
+      const isWallSel = _WALL_TYPES.has(App.state.selectedObject);
+      if (isWallSel && normal.y === 0) {
+        // Side face + wall object selected → compute canonical wall key
+        let wk = null;
+        if      (normal.x === -1) wk = `${x},${y},${z},W`;
+        else if (normal.x ===  1) wk = `${x+1},${y},${z},W`;
+        else if (normal.z === -1) wk = `${x},${y},${z},N`;
+        else if (normal.z ===  1) wk = `${x},${y},${z+1},N`;
+        const buildTarget = wk && !App.state.walls.has(wk) ? wk : null;
+        return { type: 'cube', key, normal, buildTarget };
+      }
+
       const tx = x + Math.round(normal.x);
       const ty = y + Math.round(normal.y);
       const tz = z + Math.round(normal.z);
-      const targetKey  = `${tx},${ty},${tz}`;
+      const targetKey   = `${tx},${ty},${tz}`;
       const buildTarget = App.state.cells.has(targetKey) ? null : targetKey;
-
       return { type: 'cube', key, normal, buildTarget };
     }
 

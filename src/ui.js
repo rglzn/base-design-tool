@@ -338,11 +338,17 @@
 
     if (tool === 'build') {
       if (hit.buildTarget) {
-        const [x, y, z] = hit.buildTarget.split(',').map(Number);
-        App.placeCell(x, y, z);
+        const parts = hit.buildTarget.split(',');
+        if (parts.length === 4) {
+          App.placeWall(hit.buildTarget);
+        } else {
+          App.placeCell(+parts[0], +parts[1], +parts[2]);
+        }
       }
     } else if (tool === 'delete') {
-      if (hit.key) {
+      if (hit.type === 'wall' && hit.key) {
+        App.deleteWall(hit.key);
+      } else if (hit.key && hit.type !== 'wall') {
         const [x, y, z] = hit.key.split(',').map(Number);
         App.deleteCell(x, y, z);
       }
