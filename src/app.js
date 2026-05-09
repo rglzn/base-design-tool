@@ -88,7 +88,7 @@
 
   function _deserialize(data) {
     if (!data) return;
-    state.building = data.building || [{ bx: 0, bz: 0 }];
+    state.building = (data.building && data.building.length > 0) ? data.building : [{ bx: 0, bz: 0 }];
     state.cells    = new Map();
     (data.cells || []).forEach(({ x, y, z, object, direction, colorId }) => {
       state.cells.set(`${x},${y},${z}`, { object, direction, colorId });
