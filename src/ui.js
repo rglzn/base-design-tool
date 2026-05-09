@@ -290,9 +290,11 @@
         cell.className = 'fp-cell';
 
         if (filledSet.has(key)) {
-          const hasContent = App.blockHasContent(bx, bz);
+          const hasContent  = App.blockHasContent(bx, bz);
+          const canRemove   = App.canRemoveBlock(bx, bz);
           cell.classList.add('fp-cell--filled');
-          if (hasContent) cell.classList.add('has-content');
+          if (hasContent)  cell.classList.add('has-content');
+          if (!canRemove)  cell.classList.add('fp-cell--locked');
           cell.addEventListener('click', () => {
             if (!App.canRemoveBlock(bx, bz)) return;
             if (hasContent) {
@@ -306,9 +308,11 @@
             }
           });
         } else {
-          const adjacent = [[1,0],[-1,0],[0,1],[0,-1]].some(
-            ([dx, dz]) => filledSet.has(`${bx+dx},${bz+dz}`)
-          );
+          const adjacent = building.length === 0
+            ? (bx === 0 && bz === 0)  // recovery: allow (0,0) when completely empty
+            : [[1,0],[-1,0],[0,1],[0,-1]].some(
+                ([dx, dz]) => filledSet.has(`${bx+dx},${bz+dz}`)
+              );
           if (adjacent) {
             cell.classList.add('fp-cell--ghost');
             cell.addEventListener('click', () => {

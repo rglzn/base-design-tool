@@ -274,9 +274,8 @@
     const idx = state.building.findIndex(b => b.bx === bx && b.bz === bz);
     if (idx === -1) return { ok: false, reason: 'not-found' };
     const remaining = state.building.filter((_, i) => i !== idx);
-    if (remaining.length > 0 && !_isConnected(remaining)) {
-      return { ok: false, reason: 'disconnected' };
-    }
+    if (remaining.length === 0) return { ok: false, reason: 'last-block' };
+    if (!_isConnected(remaining)) return { ok: false, reason: 'disconnected' };
     const hadContent = _blockHasContent(bx, bz);
     state.building.splice(idx, 1);
     if (hadContent) {
@@ -302,7 +301,7 @@
   function blockHasContent(bx, bz)  { return _blockHasContent(bx, bz); }
   function canRemoveBlock(bx, bz) {
     const remaining = state.building.filter(b => !(b.bx === bx && b.bz === bz));
-    return remaining.length === 0 || _isConnected(remaining);
+    return remaining.length > 0 && _isConnected(remaining);
   }
 
   function footprintLabel() {
