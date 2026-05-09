@@ -15,6 +15,7 @@
   --success:     #27ae60;
   --sidebar:     264px;
   --topbar:      48px;
+  --shortcuts:   30px;
 }
 
 /* ── Reset ───────────────────────────────────────────────────────── */
@@ -33,10 +34,11 @@ body {
   overflow: hidden;
   display: grid;
   grid-template-columns: var(--sidebar) 1fr;
-  grid-template-rows: var(--topbar) 1fr;
+  grid-template-rows: var(--topbar) var(--shortcuts) 1fr;
   grid-template-areas:
-    "topbar  topbar"
-    "sidebar viewport";
+    "topbar    topbar"
+    "shortcuts shortcuts"
+    "sidebar   viewport";
 }
 
 /* ── Top bar ─────────────────────────────────────────────────────── */
@@ -63,6 +65,45 @@ body {
 .topbar-actions {
   display: flex;
   gap: 8px;
+}
+
+/* ── Shortcuts strip ─────────────────────────────────────────────── */
+#shortcuts-strip {
+  grid-area: shortcuts;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  overflow: hidden;
+}
+
+.shortcut-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.shortcut-pill .key {
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: var(--text);
+  font-size: 10px;
+}
+
+.shortcut-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  flex-shrink: 0;
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────────── */
@@ -395,6 +436,63 @@ button:not(:disabled):active {
   text-transform: uppercase;
 }
 
+/* ── View toggles ────────────────────────────────────────────────── */
+.view-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.view-toggle-label {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.toggle-switch {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--border2);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.toggle-switch input:checked + .toggle-track {
+  background: var(--accent2);
+}
+
+.toggle-switch input:checked + .toggle-track::after {
+  transform: translateX(14px);
+  background: var(--accent);
+}
+
 /* ── Stamp list ──────────────────────────────────────────────────── */
 #stamp-list {
   margin-top: 8px;
@@ -403,53 +501,188 @@ button:not(:disabled):active {
   gap: 4px;
 }
 
-/* ── Footprint editor grid ───────────────────────────────────────── */
-.footprint-grid {
-  display: inline-grid;
-  gap: 3px;
-  margin: 12px auto;
+/* ── Setup screen ────────────────────────────────────────────────── */
+#setup-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 32px 24px;
 }
 
-.fp-cell {
-  width: 44px;
-  height: 44px;
+.setup-heading {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+}
+
+.setup-subheading {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: -12px;
+}
+
+.setup-project-list {
+  width: 100%;
+  max-width: 500px;
+  max-height: 340px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.setup-project-list::-webkit-scrollbar       { width: 4px; }
+.setup-project-list::-webkit-scrollbar-track { background: transparent; }
+.setup-project-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.setup-project-list .project-item:last-child {
+  border-bottom: none;
+}
+
+.setup-btn {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 14px 32px;
+  border: 1px solid var(--accent2);
   border-radius: 3px;
-  cursor: pointer;
-  border: 1px solid var(--border2);
-  transition: background 0.1s, border-color 0.1s;
-}
-
-.fp-cell--filled {
-  background: var(--accent2);
-  border-color: var(--accent);
-  cursor: pointer;
-}
-
-.fp-cell--filled.has-content {
-  box-shadow: inset 0 0 0 3px rgba(208, 232, 248, 0.2);
-}
-
-.fp-cell--locked {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.fp-cell--ghost {
   background: transparent;
-  border-color: var(--border);
-  opacity: 0.5;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 
-.fp-cell--ghost:hover {
+button.setup-btn:hover {
+  background: var(--accent2);
   border-color: var(--accent2);
-  background: rgba(42, 100, 150, 0.15);
-  opacity: 1;
+  color: #fff;
 }
 
-.fp-cell--empty {
+/* ── Footprint editor (inline) ───────────────────────────────────── */
+#footprint-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--bg);
+  padding: 32px 24px;
+}
+
+.fp-editor-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+}
+
+.fp-editor-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  max-width: 420px;
+  line-height: 1.6;
+}
+
+#block-grid {
+  display: inline-grid;
+  gap: 2px;
+}
+
+/* ── Block cells (footprint editor) ──────────────────────────────── */
+.block-cell {
+  width: 60px;
+  height: 60px;
+  border: 1px solid var(--border2);
+  background: var(--panel2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+.block-cell--filled {
+  background: #1a2d40;
+  border-color: var(--accent2);
+  color: var(--accent);
+}
+
+.block-cell--filled:hover {
+  background: #1e3550;
+}
+
+.block-remove {
+  display: none;
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 9px;
+  color: var(--danger);
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  padding: 1px 2px;
+  line-height: 1;
+}
+
+.block-cell--filled:hover .block-remove {
+  display: block;
+}
+
+.block-cell--ghost {
+  background: rgba(74, 159, 212, 0.05);
+  border: 1px dashed var(--border2);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.block-cell--ghost::before {
+  content: '+';
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 16px;
+  color: var(--text-dim);
+  transition: color 0.15s;
+}
+
+.block-cell--ghost:hover {
+  background: rgba(74, 159, 212, 0.12);
+  border-color: var(--accent);
+}
+
+.block-cell--ghost:hover::before {
+  color: var(--accent);
+}
+
+.block-cell--empty {
   background: transparent;
   border-color: transparent;
   cursor: default;
+  pointer-events: none;
+}
+
+.block-cell--locked {
+  opacity: 0.4;
   pointer-events: none;
 }
 
@@ -487,10 +720,6 @@ button:not(:disabled):active {
   to   { transform: translateY(0);   opacity: 1; }
 }
 
-.modal-box--footprint {
-  min-width: 380px;
-  text-align: center;
-}
 
 .modal-box--colour {
   min-width: 240px;

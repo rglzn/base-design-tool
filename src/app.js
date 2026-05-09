@@ -22,16 +22,16 @@
     // persisted
     building:        [{ bx: 0, bz: 0 }],
     cells:           new Map(),
-    walls:           new Map(),
     colors:          DEFAULT_COLOURS.map(c => ({ ...c })),
     project:         null,   // { id, name, isNamed }
 
     // editor-only
-    tool:            'build',
-    selectedObject:  'cube',
-    placeDirection:  'N',
-    selectedColorId: 0,
-    selection:       new Set(),
+    tool:               'build',
+    selectedObject:     'cube',
+    placeDirection:     'N',
+    selectedColorId:    0,
+    selection:          new Set(),
+    showPlacementGhost: true,
   };
 
   // Supabase client
@@ -78,10 +78,6 @@
         const [x, y, z] = key.split(',').map(Number);
         return { x, y, z, object: cell.object, direction: cell.direction, colorId: cell.colorId };
       }),
-      walls: [...state.walls.entries()].map(([key, wall]) => {
-        const [x, y, z, edge] = key.split(',');
-        return { x: +x, y: +y, z: +z, edge, type: wall.type, colorId: wall.colorId };
-      }),
       colors: state.colors,
     };
   }
@@ -91,20 +87,17 @@
     state.building = (data.building && data.building.length > 0) ? data.building : [{ bx: 0, bz: 0 }];
     state.cells    = new Map();
     (data.cells || []).forEach(({ x, y, z, object, direction, colorId }) => {
+      if (!['cube', 'stair-solid', 'wedge-solid', 'wedge-solid-inverted'].includes(object)) return;
       state.cells.set(`${x},${y},${z}`, { object, direction, colorId });
-    });
-    state.walls    = new Map();
-    (data.walls || []).forEach(({ x, y, z, edge, type, colorId }) => {
-      state.walls.set(`${x},${y},${z},${edge}`, { type, colorId });
     });
     state.colors  = data.colors || DEFAULT_COLOURS.map(c => ({ ...c }));
     _nextColorId  = state.colors.reduce((m, c) => Math.max(m, c.id), -1) + 1;
     state.selectedColorId = state.colors[0]?.id ?? 0;
-    state.walls           = new Map();
     state.selection       = new Set();
-    state.tool            = 'build';
-    state.selectedObject  = 'cube';
-    state.placeDirection  = 'N';
+    state.tool               = 'build';
+    state.selectedObject     = 'cube';
+    state.placeDirection     = 'N';
+    state.showPlacementGhost = true;
   }
 
   // ── Tool / object / colour ─────────────────────────────────────
@@ -133,6 +126,11 @@
 
   function setColor(id) {
     state.selectedColorId = id;
+    _refreshUI();
+  }
+
+  function setShowPlacementGhost(val) {
+    state.showPlacementGhost = val;
     _refreshUI();
   }
 
@@ -174,30 +172,12 @@
     const key = `${x},${y},${z}`;
     if (state.cells.has(key)) return false;
     if (!_inFootprint(x, z)) return false;
-    const isIncline = ['stair-solid','stair-thin','wedge-solid','wedge-thin'].includes(state.selectedObject);
+    const isIncline = ['stair-solid', 'wedge-solid', 'wedge-solid-inverted'].includes(state.selectedObject);
     state.cells.set(key, {
       object:    state.selectedObject,
       direction: isIncline ? state.placeDirection : null,
       colorId:   state.selectedColorId,
     });
-    _markDirty();
-    return true;
-  }
-
-  // ── Wall placement ─────────────────────────────────────────────
-  // wallKey is canonical: "x,y,z,N" or "x,y,z,W"
-  function placeWall(wallKey) {
-    if (state.walls.has(wallKey)) return false;
-    const [x, y, z] = wallKey.split(',').map(Number);
-    if (!_inFootprint(x, z)) return false;
-    state.walls.set(wallKey, { type: state.selectedObject, colorId: state.selectedColorId });
-    _markDirty();
-    return true;
-  }
-
-  function deleteWall(wallKey) {
-    if (!state.walls.has(wallKey)) return false;
-    state.walls.delete(wallKey);
     _markDirty();
     return true;
   }
@@ -212,9 +192,11 @@
   }
 
   // ── Selection ──────────────────────────────────────────────────
-  function addToSelection(key) { state.selection.add(key);    _refreshUI(); }
-  function removeFromSelection(key) { state.selection.delete(key); _refreshUI(); }
-  function clearSelection() { if (state.selection.size) { state.selection.clear(); _refreshUI(); } }
+  function _markSceneDirty() { if (window.Scene) window.Scene.markDirty(); _refreshUI(); }
+
+  function addToSelection(key)      { state.selection.add(key);    _markSceneDirty(); }
+  function removeFromSelection(key) { state.selection.delete(key); _markSceneDirty(); }
+  function clearSelection()         { if (state.selection.size) { state.selection.clear(); _markSceneDirty(); } }
 
   function deleteSelection() {
     state.selection.forEach(key => state.cells.delete(key));
@@ -286,19 +268,13 @@
           state.selection.delete(key);
         }
       }
-      for (const key of [...state.walls.keys()]) {
-        const [wx, , wz] = key.split(',').map(Number);
-        if (Math.floor(wx / 10) === bx && Math.floor(wz / 10) === bz) {
-          state.walls.delete(key);
-        }
-      }
     }
     _markDirty();
     _refreshUI();
     return { ok: true, hadContent };
   }
 
-  function blockHasContent(bx, bz)  { return _blockHasContent(bx, bz); }
+  function blockHasContent(bx, bz) { return _blockHasContent(bx, bz); }
   function canRemoveBlock(bx, bz) {
     const remaining = state.building.filter(b => !(b.bx === bx && b.bz === bz));
     return remaining.length > 0 && _isConnected(remaining);
@@ -311,18 +287,7 @@
 
   // ── Project CRUD ───────────────────────────────────────────────
   async function loadActiveProject() {
-    try {
-      const { data, error } = await window._sb
-        .from('app_state')
-        .select('value')
-        .eq('key', 'active_project_id')
-        .maybeSingle();
-      if (error) throw error;
-      if (!data?.value) { window.UI.showFirstRunModal(); return; }
-      await loadProject(data.value);
-    } catch (_) {
-      window.UI.showFirstRunModal();
-    }
+    window.UI.showFirstRunModal();
   }
 
   async function loadProject(id) {
@@ -405,11 +370,10 @@
     return state.project?.isNamed === true;
   }
 
-  // ── Init — resets state; loadActiveProject called from UI.init ─
+  // ── Init ───────────────────────────────────────────────────────
   function init() {
     state.building        = [{ bx: 0, bz: 0 }];
     state.cells           = new Map();
-    state.walls           = new Map();
     state.colors          = DEFAULT_COLOURS.map(c => ({ ...c }));
     state.project         = null;
     state.tool            = 'build';
@@ -423,9 +387,9 @@
   // ── Public API ─────────────────────────────────────────────────
   window.App = {
     state,
-    setTool, setSelectedObject, setPlaceDirection, rotatePlaceDirection, setColor,
+    setTool, setSelectedObject, setPlaceDirection, rotatePlaceDirection, setColor, setShowPlacementGhost,
     addColor, updateColor, deleteColor, getColorHex,
-    placeCell, deleteCell, placeWall, deleteWall,
+    placeCell, deleteCell,
     addToSelection, removeFromSelection, clearSelection, deleteSelection,
     addBlock, removeBlock, blockHasContent, canRemoveBlock, footprintLabel,
     loadActiveProject, loadProject, createFirstProject,

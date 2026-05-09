@@ -30,6 +30,21 @@
     </div>
   </header>
 
+  <!-- ── Shortcuts strip ───────────────────────────────────────────── -->
+  <div id="shortcuts-strip">
+    <span class="shortcut-pill"><span class="key">B</span> Build</span>
+    <span class="shortcut-sep"></span>
+    <span class="shortcut-pill"><span class="key">D</span> Delete</span>
+    <span class="shortcut-sep"></span>
+    <span class="shortcut-pill"><span class="key">S</span> Select</span>
+    <span class="shortcut-sep"></span>
+    <span class="shortcut-pill"><span class="key">Q</span><span class="key">E</span> Rotate</span>
+    <span class="shortcut-sep"></span>
+    <span class="shortcut-pill"><span class="key">Del</span> Remove sel</span>
+    <span class="shortcut-sep"></span>
+    <span class="shortcut-pill"><span class="key">WASD</span> Move</span>
+  </div>
+
   <!-- ── Sidebar ───────────────────────────────────────────────────── -->
   <aside id="sidebar">
 
@@ -55,33 +70,17 @@
           <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-cube" /></svg>
           <span class="object-label">Cube</span>
         </button>
-        <button class="btn-object" id="obj-wall-plain" data-object="wall-plain">
-          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wall-plain" /></svg>
-          <span class="object-label">Wall</span>
-        </button>
-        <button class="btn-object" id="obj-wall-window" data-object="wall-window">
-          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wall-window" /></svg>
-          <span class="object-label">Window</span>
-        </button>
-        <button class="btn-object" id="obj-wall-doorway" data-object="wall-doorway">
-          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wall-doorway" /></svg>
-          <span class="object-label">Doorway</span>
-        </button>
         <button class="btn-object" id="obj-stair-solid" data-object="stair-solid">
           <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-stair-solid" /></svg>
           <span class="object-label">Stair</span>
-        </button>
-        <button class="btn-object" id="obj-stair-thin" data-object="stair-thin">
-          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-stair-thin" /></svg>
-          <span class="object-label">Stair Thin</span>
         </button>
         <button class="btn-object" id="obj-wedge-solid" data-object="wedge-solid">
           <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wedge-solid" /></svg>
           <span class="object-label">Wedge</span>
         </button>
-        <button class="btn-object" id="obj-wedge-thin" data-object="wedge-thin">
-          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wedge-thin" /></svg>
-          <span class="object-label">Wedge Thin</span>
+        <button class="btn-object" id="obj-wedge-solid-inverted" data-object="wedge-solid-inverted">
+          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wedge-solid-inverted" /></svg>
+          <span class="object-label">Wedge Inv</span>
         </button>
       </div>
     </section>
@@ -90,6 +89,24 @@
       <h3 class="sidebar-heading">Stamps</h3>
       <button id="btn-save-stamp" class="btn-secondary btn-sm" disabled>Save selection</button>
       <div id="stamp-list"></div>
+    </section>
+
+    <section class="sidebar-section" id="section-view">
+      <h3 class="sidebar-heading">View</h3>
+      <div class="view-toggle-row">
+        <span class="view-toggle-label">Placement ghost</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-ghost" checked />
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+      <div class="view-toggle-row">
+        <span class="view-toggle-label">X-ray</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-xray" disabled />
+          <span class="toggle-track"></span>
+        </label>
+      </div>
     </section>
 
     <section class="sidebar-section" id="section-footprint">
@@ -102,15 +119,33 @@
 
   <!-- ── Viewport ──────────────────────────────────────────────────── -->
   <main id="viewport">
-    <!-- Three.js renderer canvas appended here by scene.js -->
-    <div id="hud">
+
+    <!-- Setup screen — shown on startup when saved projects exist -->
+    <div id="setup-screen" style="display:none">
+      <h2 class="setup-heading">Base Design Tool</h2>
+      <p class="setup-subheading">Guild Base Planner</p>
+      <div class="js-project-list setup-project-list"></div>
+      <button class="setup-btn js-start-fresh">Start Fresh</button>
+    </div>
+
+    <!-- Footprint editor — inline overlay, replaces canvas view -->
+    <div id="footprint-editor" style="display:none">
+      <h2 class="fp-editor-title">Building Footprint</h2>
+      <p class="fp-editor-hint">Click + on an edge to add a 10×10 block. Max 6 blocks total. Click ✕ on a block to remove it.</p>
+      <div id="block-grid"></div>
+      <button class="setup-btn js-fp-done">Done</button>
+    </div>
+
+    <!-- Three.js canvas appended here by scene.js -->
+
+    <!-- HUD — compass, direction indicator, controls -->
+    <div id="hud" style="display:none">
       <canvas id="compass-canvas" width="80" height="80" aria-label="Compass"></canvas>
       <div id="hud-direction" class="hud-direction" hidden>
         <span class="hud-direction-label">Direction</span>
         <span id="hud-direction-value" class="hud-direction-value">N</span>
         <span class="hud-direction-hint">Q ↺  E ↻</span>
       </div>
-      <button id="btn-xray" class="btn-hud" disabled title="X-Ray (coming soon)">X-Ray</button>
     </div>
   </main>
 
@@ -130,23 +165,6 @@
     </div>
   </template>
 
-  <!-- Footprint editor modal -->
-  <template id="tmpl-modal-footprint">
-    <div class="modal-overlay" role="dialog" aria-modal="true">
-      <div class="modal-box modal-box--footprint">
-        <div class="modal-header">
-          <span class="modal-title">Edit Footprint</span>
-          <button class="btn-icon js-modal-close" aria-label="Close">✕</button>
-        </div>
-        <p class="modal-hint">Max 6 blocks · Must stay connected</p>
-        <div id="footprint-grid" class="footprint-grid"></div>
-        <div class="modal-actions">
-          <button class="btn-secondary js-modal-close">Done</button>
-        </div>
-      </div>
-    </div>
-  </template>
-
   <!-- Colour picker modal -->
   <template id="tmpl-modal-colour">
     <div class="modal-overlay" role="dialog" aria-modal="true">
@@ -161,25 +179,6 @@
         <div class="modal-actions">
           <button class="btn-secondary js-modal-cancel">Cancel</button>
           <button class="btn-primary js-colour-confirm">Apply</button>
-        </div>
-      </div>
-    </div>
-  </template>
-
-  <!-- First-run modal — no cancel, shown when no active project exists -->
-  <template id="tmpl-modal-first-run">
-    <div class="modal-overlay modal-overlay--locked" role="dialog" aria-modal="true">
-      <div class="modal-box">
-        <div class="modal-header">
-          <span class="modal-title">Welcome to Base Design Tool</span>
-        </div>
-        <div class="modal-body-text">
-          <p class="modal-hint" style="padding:0 0 12px;">Name your first project to get started.</p>
-          <input type="text" class="text-input js-project-name"
-                 placeholder="Project name" maxlength="64" autocomplete="off" />
-        </div>
-        <div class="modal-actions">
-          <button class="btn-primary js-first-run-create" disabled>Create</button>
         </div>
       </div>
     </div>
@@ -232,68 +231,53 @@
 
     <!-- Cube: isometric three-face view -->
     <symbol id="icon-cube" viewBox="0 0 40 40">
-      <polygon points="20,3 37,12.5 20,22 3,12.5"   fill="currentColor" opacity="0.90"/>
-      <polygon points="3,12.5 20,22 20,37 3,27.5"   fill="currentColor" opacity="0.55"/>
-      <polygon points="37,12.5 20,22 20,37 37,27.5"  fill="currentColor" opacity="0.72"/>
+      <polygon points="20,4 36,13 20,22 4,13"        fill="currentColor" opacity="0.90"/>
+      <polygon points="4,13 20,22 20,36 4,27"        fill="currentColor" opacity="0.55"/>
+      <polygon points="36,13 20,22 20,36 36,27"      fill="currentColor" opacity="0.72"/>
     </symbol>
 
-    <!-- Wall plain: upright slab, isometric front face + thin top -->
-    <symbol id="icon-wall-plain" viewBox="0 0 40 40">
-      <polygon points="5,10 35,10 35,35 5,35"       fill="currentColor" opacity="0.80"/>
-      <polygon points="5,10 35,10 38,7 8,7"         fill="currentColor" opacity="0.55"/>
-    </symbol>
-
-    <!-- Wall window: plain wall with centred square pane -->
-    <symbol id="icon-wall-window" viewBox="0 0 40 40">
-      <polygon points="5,10 35,10 35,35 5,35"       fill="currentColor" opacity="0.80"/>
-      <polygon points="5,10 35,10 38,7 8,7"         fill="currentColor" opacity="0.55"/>
-      <rect x="13" y="16" width="14" height="12"    fill="currentColor" opacity="0.25"/>
-      <rect x="13" y="16" width="14" height="12"    fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.90"/>
-    </symbol>
-
-    <!-- Wall doorway: plain wall with tall opening reaching the floor -->
-    <symbol id="icon-wall-doorway" viewBox="0 0 40 40">
-      <polygon points="5,10 35,10 35,35 5,35"       fill="currentColor" opacity="0.80"/>
-      <polygon points="5,10 35,10 38,7 8,7"         fill="currentColor" opacity="0.55"/>
-      <rect x="14" y="18" width="12" height="17"    fill="currentColor" opacity="0.25"/>
-      <rect x="14" y="18" width="12" height="17"    fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.90"/>
-    </symbol>
-
-    <!-- Stair solid: isometric filled stepped wedge -->
+    <!-- Stair solid: two steps rising left-to-right, isometric -->
     <symbol id="icon-stair-solid" viewBox="0 0 40 40">
-      <!-- bottom step -->
-      <polygon points="3,30 20,21 37,30 20,39"      fill="currentColor" opacity="0.90"/>
-      <polygon points="3,30 20,39 20,34 3,25"       fill="currentColor" opacity="0.55"/>
-      <polygon points="37,30 20,39 20,34 37,25"     fill="currentColor" opacity="0.72"/>
-      <!-- top step -->
-      <polygon points="11,21 20,16 29,21 20,26"     fill="currentColor" opacity="0.90"/>
-      <polygon points="11,21 20,26 20,21 11,16"     fill="currentColor" opacity="0.55"/>
-      <polygon points="29,21 20,26 20,21 29,16"     fill="currentColor" opacity="0.72"/>
-      <!-- peak cap -->
-      <polygon points="20,7 29,12 20,17 11,12"      fill="currentColor" opacity="0.90"/>
+      <!-- bottom step top face -->
+      <polygon points="4,27 20,36 20,27 4,18"        fill="currentColor" opacity="0.90"/>
+      <!-- bottom step front face (right side) -->
+      <polygon points="20,27 36,18 36,27 20,36"      fill="currentColor" opacity="0.72"/>
+      <!-- bottom step left face -->
+      <polygon points="4,18 20,27 20,36 4,27"        fill="currentColor" opacity="0.55"/>
+      <!-- top step top face -->
+      <polygon points="4,18 20,27 20,18 4,9"         fill="currentColor" opacity="0.90"/>
+      <!-- top step front riser face -->
+      <polygon points="20,18 20,27 36,18 36,9"       fill="currentColor" opacity="0.72"/>
+      <!-- top step left face -->
+      <polygon points="4,9 20,18 20,27 4,18"         fill="currentColor" opacity="0.55"/>
     </symbol>
 
-    <!-- Stair thin: stepped surface only (no solid fill beneath) -->
-    <symbol id="icon-stair-thin" viewBox="0 0 40 40">
-      <polyline points="3,32 3,24 14,18 14,11 26,5 37,11 37,19 26,25 26,32 14,38 3,32"
-                fill="currentColor" opacity="0.30"
-                stroke="currentColor" stroke-width="1.5" opacity="0.90"/>
-    </symbol>
-
-    <!-- Wedge solid: isometric smooth filled wedge -->
+    <!-- Wedge solid: slope rises from front-low to back-high -->
     <symbol id="icon-wedge-solid" viewBox="0 0 40 40">
-      <polygon points="20,4 37,13.5 37,28.5 20,19"  fill="currentColor" opacity="0.90"/>
-      <polygon points="3,28.5 20,19 20,34 3,28.5"   fill="currentColor" opacity="0.55"/>
-      <polygon points="37,13.5 20,19 20,34 37,28.5" fill="currentColor" opacity="0.72"/>
-      <polygon points="3,28.5 20,4 37,13.5 20,19 3,28.5"
-                                                     fill="currentColor" opacity="0.55"/>
+      <!-- slope face (top-diagonal) -->
+      <polygon points="4,27 36,27 20,13 4,13"        fill="currentColor" opacity="0.90"/>
+      <!-- back face (tall vertical) -->
+      <polygon points="4,13 20,13 20,27 4,27"        fill="currentColor" opacity="0.55"/>
+      <!-- right side triangle -->
+      <polygon points="36,27 20,13 20,27"            fill="currentColor" opacity="0.72"/>
+      <!-- bottom face -->
+      <polygon points="4,27 36,27 20,36 4,36"        fill="currentColor" opacity="0.55"/>
+      <!-- right bottom -->
+      <polygon points="36,27 20,27 20,36"            fill="currentColor" opacity="0.72"/>
     </symbol>
 
-    <!-- Wedge thin: sloped surface only -->
-    <symbol id="icon-wedge-thin" viewBox="0 0 40 40">
-      <polygon points="3,32 20,6 37,15.5 37,30 20,36 3,32"
-               fill="currentColor" opacity="0.25"
-               stroke="currentColor" stroke-width="1.5"/>
+    <!-- Wedge solid inverted: slope falls from front-high to back-low -->
+    <symbol id="icon-wedge-solid-inverted" viewBox="0 0 40 40">
+      <!-- front face (tall vertical) -->
+      <polygon points="4,13 20,4 20,27 4,27"         fill="currentColor" opacity="0.90"/>
+      <!-- slope face -->
+      <polygon points="20,4 36,13 36,27 20,27"       fill="currentColor" opacity="0.72"/>
+      <!-- top slope (triangle left) -->
+      <polygon points="4,13 20,4 20,27 4,27"         fill="currentColor" opacity="0.55"/>
+      <!-- right side triangle top -->
+      <polygon points="20,4 36,13 20,13"             fill="currentColor" opacity="0.90"/>
+      <!-- bottom -->
+      <polygon points="4,27 20,27 36,27 20,36 4,36"  fill="currentColor" opacity="0.55"/>
     </symbol>
 
   </svg>

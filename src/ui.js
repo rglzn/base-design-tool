@@ -1,17 +1,106 @@
 /* ui.js — sidebar, modals, footprint editor, hotkeys, event wiring. */
 (function () {
 
+  // ── View state ─────────────────────────────────────────────────
+  // 'canvas' | 'setup-screen' | 'footprint-editor' | null (initial loading)
+  let _currentView = null;
+
+  function _showView(id) {
+    _currentView = id;
+    const overlays = ['setup-screen', 'footprint-editor'];
+    overlays.forEach(v => {
+      const el = document.getElementById(v);
+      if (el) el.style.display = (v === id) ? 'flex' : 'none';
+    });
+    const hud = document.getElementById('hud');
+    if (hud) hud.style.display = (id === 'canvas') ? '' : 'none';
+    if (id === 'canvas' && window.Scene) window.Scene.markDirty();
+  }
+
+  // ── Setup screen ───────────────────────────────────────────────
+  function showSetupScreen(projects) {
+    _showView('setup-screen');
+    const screen = document.getElementById('setup-screen');
+    const list   = screen.querySelector('.js-project-list');
+    list.innerHTML = '';
+
+    projects.forEach(proj => list.appendChild(_buildSetupItem(proj)));
+
+    screen.querySelector('.js-start-fresh').onclick = async () => {
+      await App.createFirstProject('Untitled');
+      showFootprintEditor();
+    };
+  }
+
+  function _buildSetupItem(proj) {
+    const item = document.createElement('div');
+    item.className = 'project-item';
+
+    if (proj.thumbnail) {
+      const img = document.createElement('img');
+      img.className = 'project-thumbnail';
+      img.src       = proj.thumbnail;
+      img.alt       = '';
+      item.appendChild(img);
+    } else {
+      const ph = document.createElement('div');
+      ph.className  = 'project-thumbnail project-thumbnail--empty';
+      ph.textContent = '□';
+      item.appendChild(ph);
+    }
+
+    const info   = document.createElement('div');
+    info.className = 'project-item-info';
+    const nameEl = document.createElement('div');
+    nameEl.className  = 'project-item-name';
+    nameEl.textContent = proj.name;
+    const dateEl = document.createElement('div');
+    dateEl.className  = 'project-item-date';
+    dateEl.textContent = _relativeDate(proj.updated_at);
+    info.append(nameEl, dateEl);
+    item.appendChild(info);
+
+    item.addEventListener('click', async () => {
+      await App.loadProject(proj.id);
+      _showView('canvas');
+    });
+
+    return item;
+  }
+
+  // ── Footprint editor ───────────────────────────────────────────
+  function showFootprintEditor() {
+    _showView('footprint-editor');
+    _buildFootprintGrid(document.getElementById('block-grid'));
+  }
+
+  // Called by App.loadActiveProject when there is no active project.
+  // Fetches named projects; shows setup screen if any exist, otherwise
+  // silently creates an untitled project and opens the footprint builder.
+  async function showFirstRunModal() {
+    try {
+      const projects = await App.fetchNamedProjects();
+      if (projects.length > 0) {
+        showSetupScreen(projects);
+      } else {
+        await App.createFirstProject('Untitled');
+        showFootprintEditor();
+      }
+    } catch (_) {
+      showError('Failed to connect. Please refresh.');
+    }
+  }
+
   // ── Modal state ────────────────────────────────────────────────
-  let _activeModal  = null;
-  let _errorTimer   = null;
+  let _activeModal = null;
+  let _errorTimer  = null;
 
   function _openModal(templateId) {
     if (_activeModal) _closeModal();
     const tmpl    = document.getElementById(templateId);
     const overlay = tmpl.content.cloneNode(true).querySelector('.modal-overlay');
     document.body.appendChild(overlay);
-    _activeModal = overlay;
-    // Locked overlays (e.g. first-run) do not close on backdrop click
+    _activeModal  = overlay;
     if (!overlay.classList.contains('modal-overlay--locked')) {
       overlay.addEventListener('click', e => {
         if (e.target === overlay) _closeModal();
@@ -42,28 +131,6 @@
     banner.classList.add('visible');
     clearTimeout(_errorTimer);
     _errorTimer = setTimeout(() => banner.classList.remove('visible'), 4500);
-  }
-
-  // ── First-run modal (locked — no cancel, no ESC) ───────────────
-  function showFirstRunModal() {
-    const overlay = _openModal('tmpl-modal-first-run');
-    const input   = overlay.querySelector('.js-project-name');
-    const btn     = overlay.querySelector('.js-first-run-create');
-
-    input.addEventListener('input', () => {
-      btn.disabled = input.value.trim().length === 0;
-    });
-
-    btn.addEventListener('click', async () => {
-      const name = input.value.trim();
-      if (!name) return;
-      btn.disabled    = true;
-      btn.textContent = 'Creating…';
-      _closeModal();
-      await App.createFirstProject(name);
-    });
-
-    setTimeout(() => input.focus(), 60);
   }
 
   // ── Colour modal ───────────────────────────────────────────────
@@ -120,17 +187,14 @@
 
     try {
       const projects = await App.fetchNamedProjects();
-      list.innerHTML = '';
+      list.innerHTML  = '';
 
       if (!projects.length) {
         list.innerHTML = '<p class="project-list-empty">No saved projects yet.</p>';
         return;
       }
 
-      projects.forEach(proj => {
-        const item = _buildProjectItem(proj, list);
-        list.appendChild(item);
-      });
+      projects.forEach(proj => list.appendChild(_buildProjectItem(proj, list)));
     } catch (_) {
       list.innerHTML = '<p class="project-list-empty">Failed to load projects.</p>';
     }
@@ -140,37 +204,34 @@
     const item = document.createElement('div');
     item.className = 'project-item';
 
-    // Thumbnail
     if (proj.thumbnail) {
       const img = document.createElement('img');
       img.className = 'project-thumbnail';
-      img.src = proj.thumbnail;
-      img.alt = '';
+      img.src       = proj.thumbnail;
+      img.alt       = '';
       item.appendChild(img);
     } else {
       const ph = document.createElement('div');
-      ph.className = 'project-thumbnail project-thumbnail--empty';
+      ph.className  = 'project-thumbnail project-thumbnail--empty';
       ph.textContent = '□';
       item.appendChild(ph);
     }
 
-    // Info
-    const info = document.createElement('div');
+    const info   = document.createElement('div');
     info.className = 'project-item-info';
     const nameEl = document.createElement('div');
-    nameEl.className = 'project-item-name';
+    nameEl.className  = 'project-item-name';
     nameEl.textContent = proj.name;
     const dateEl = document.createElement('div');
-    dateEl.className = 'project-item-date';
+    dateEl.className  = 'project-item-date';
     dateEl.textContent = _relativeDate(proj.updated_at);
     info.append(nameEl, dateEl);
     item.appendChild(info);
 
-    // Delete button
     const del = document.createElement('button');
-    del.className = 'project-item-delete';
+    del.className  = 'project-item-delete';
     del.textContent = '×';
-    del.title = 'Delete project';
+    del.title      = 'Delete project';
     del.addEventListener('click', e => {
       e.stopPropagation();
       showDangerModal(
@@ -188,10 +249,10 @@
     });
     item.appendChild(del);
 
-    // Click row to load
     item.addEventListener('click', async () => {
       _closeModal();
       await App.loadProject(proj.id);
+      _showView('canvas');
     });
 
     return item;
@@ -199,12 +260,12 @@
 
   function _relativeDate(iso) {
     const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-    if (mins < 1)   return 'just now';
-    if (mins < 60)  return `${mins}m ago`;
+    if (mins < 1)  return 'just now';
+    if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24)   return `${hrs}h ago`;
+    if (hrs < 24)  return `${hrs}h ago`;
     const days = Math.floor(hrs / 24);
-    if (days < 30)  return `${days}d ago`;
+    if (days < 30) return `${days}d ago`;
     return `${Math.floor(days / 30)}mo ago`;
   }
 
@@ -223,9 +284,9 @@
 
       if (id !== 0) {
         const del = document.createElement('button');
-        del.className = 'swatch-delete';
+        del.className  = 'swatch-delete';
         del.textContent = '×';
-        del.title = 'Delete colour';
+        del.title      = 'Delete colour';
         del.addEventListener('click', e => {
           e.stopPropagation();
           showDangerModal(
@@ -245,6 +306,7 @@
     document.querySelectorAll('.btn-tool').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tool === tool);
     });
+    if (tool !== 'build' && window.Scene) Scene.setHoverHit(null);
   }
 
   function _updateObjectButtons() {
@@ -254,12 +316,12 @@
     });
   }
 
-  const _INCLINE_TYPES = new Set(['stair-solid','stair-thin','wedge-solid','wedge-thin']);
+  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted']);
 
   function _updateDirectionHud() {
-    const hud   = document.getElementById('hud-direction');
+    const hud  = document.getElementById('hud-direction');
     const isInc = _INCLINE_TYPES.has(App.state.selectedObject);
-    hud.hidden  = !isInc;
+    hud.hidden = !isInc;
     if (isInc) document.getElementById('hud-direction-value').textContent = App.state.placeDirection;
   }
 
@@ -270,7 +332,7 @@
 
   // ── Footprint editor grid ──────────────────────────────────────
   function _buildFootprintGrid(container) {
-    const building = App.state.building;
+    const building  = App.state.building;
     const filledSet = new Set(building.map(b => `${b.bx},${b.bz}`));
 
     let minBx = 0, maxBx = 0, minBz = 0, maxBz = 0;
@@ -280,21 +342,27 @@
     });
     minBx--; maxBx++; minBz--; maxBz++;
 
-    container.style.gridTemplateColumns = `repeat(${maxBx - minBx + 1}, 44px)`;
+    container.style.gridTemplateColumns = `repeat(${maxBx - minBx + 1}, 60px)`;
     container.innerHTML = '';
 
     for (let bz = minBz; bz <= maxBz; bz++) {
       for (let bx = minBx; bx <= maxBx; bx++) {
         const key  = `${bx},${bz}`;
         const cell = document.createElement('div');
-        cell.className = 'fp-cell';
+        cell.className = 'block-cell';
 
         if (filledSet.has(key)) {
-          const hasContent  = App.blockHasContent(bx, bz);
-          const canRemove   = App.canRemoveBlock(bx, bz);
-          cell.classList.add('fp-cell--filled');
-          if (hasContent)  cell.classList.add('has-content');
-          if (!canRemove)  cell.classList.add('fp-cell--locked');
+          const hasContent = App.blockHasContent(bx, bz);
+          const canRemove  = App.canRemoveBlock(bx, bz);
+          cell.classList.add('block-cell--filled');
+          if (!canRemove) cell.classList.add('block-cell--locked');
+
+          const removeBtn = document.createElement('button');
+          removeBtn.className  = 'block-remove';
+          removeBtn.textContent = '✕';
+          removeBtn.setAttribute('aria-label', 'Remove block');
+          cell.appendChild(removeBtn);
+
           cell.addEventListener('click', () => {
             if (!App.canRemoveBlock(bx, bz)) return;
             if (hasContent) {
@@ -309,17 +377,17 @@
           });
         } else {
           const adjacent = building.length === 0
-            ? (bx === 0 && bz === 0)  // recovery: allow (0,0) when completely empty
+            ? (bx === 0 && bz === 0)
             : [[1,0],[-1,0],[0,1],[0,-1]].some(
                 ([dx, dz]) => filledSet.has(`${bx+dx},${bz+dz}`)
               );
           if (adjacent) {
-            cell.classList.add('fp-cell--ghost');
+            cell.classList.add('block-cell--ghost');
             cell.addEventListener('click', () => {
               if (App.addBlock(bx, bz)) _buildFootprintGrid(container);
             });
           } else {
-            cell.classList.add('fp-cell--empty');
+            cell.classList.add('block-cell--empty');
           }
         }
         container.appendChild(cell);
@@ -327,10 +395,19 @@
     }
   }
 
+  // ── Viewport hover (placement ghost) ──────────────────────────
+  function _onViewportMove(e) {
+    if (_currentView !== 'canvas') return;
+    if (App.state.tool !== 'build') return;
+    const hit = Scene.pickAt(e.clientX, e.clientY);
+    Scene.setHoverHit(hit);
+  }
+
   // ── Viewport click handling ────────────────────────────────────
   let _mouseDownX = 0, _mouseDownY = 0;
 
   function _onViewportClick(e) {
+    if (_currentView !== 'canvas') return;
     if (e.target.closest('#hud')) return;
     const dx = e.clientX - _mouseDownX;
     const dy = e.clientY - _mouseDownY;
@@ -342,17 +419,11 @@
 
     if (tool === 'build') {
       if (hit.buildTarget) {
-        const parts = hit.buildTarget.split(',');
-        if (parts.length === 4) {
-          App.placeWall(hit.buildTarget);
-        } else {
-          App.placeCell(+parts[0], +parts[1], +parts[2]);
-        }
+        const [x, y, z] = hit.buildTarget.split(',').map(Number);
+        App.placeCell(x, y, z);
       }
     } else if (tool === 'delete') {
-      if (hit.type === 'wall' && hit.key) {
-        App.deleteWall(hit.key);
-      } else if (hit.key && hit.type !== 'wall') {
+      if (hit.key) {
         const [x, y, z] = hit.key.split(',').map(Number);
         App.deleteCell(x, y, z);
       }
@@ -429,11 +500,12 @@
       _showColourModal('Add Colour', '#3a6b8c', hex => App.addColor(hex));
     });
     document.getElementById('btn-edit-footprint').addEventListener('click', () => {
-      const overlay = _openModal('tmpl-modal-footprint');
-      const grid    = overlay.querySelector('.footprint-grid');
-      _buildFootprintGrid(grid);
-      overlay.querySelectorAll('.js-modal-close')
-        .forEach(el => el.addEventListener('click', _closeModal));
+      showFootprintEditor();
+    });
+
+    document.getElementById('toggle-ghost').addEventListener('change', e => {
+      App.setShowPlacementGhost(e.target.checked);
+      if (!e.target.checked) Scene.setHoverHit(null);
     });
   }
 
@@ -441,11 +513,25 @@
   function _wireViewport() {
     const viewport = document.getElementById('viewport');
     viewport.addEventListener('pointerdown', e => { _mouseDownX = e.clientX; _mouseDownY = e.clientY; });
-    viewport.addEventListener('pointerup', _onViewportClick);
+    viewport.addEventListener('pointerup',   _onViewportClick);
+    viewport.addEventListener('pointermove', _onViewportMove);
+    viewport.addEventListener('pointerleave', () => Scene.setHoverHit(null));
+  }
+
+  // ── Footprint "Done" wiring ────────────────────────────────────
+  function _wireFootprintDone() {
+    document.querySelector('.js-fp-done').addEventListener('click', () => {
+      _showView('canvas');
+    });
   }
 
   // ── Public refresh ─────────────────────────────────────────────
   function refresh() {
+    // When a project loads via app.js (e.g. active project found on startup),
+    // switch to canvas the first time refresh is called with _currentView still null.
+    if (App.state.project && _currentView === null) {
+      _showView('canvas');
+    }
     _renderSwatches();
     _updateToolButtons();
     _updateObjectButtons();
@@ -458,14 +544,15 @@
     _wireTopBar();
     _wireSidebar();
     _wireViewport();
+    _wireFootprintDone();
     document.addEventListener('keydown', _onKeyDown);
     refresh();
-    App.loadActiveProject(); // async — shows first-run modal or loads saved state
+    App.loadActiveProject(); // async — calls showFirstRunModal or loads saved project
   }
 
-  window.UI = { init, refresh, showDangerModal, showFirstRunModal, showError };
+  window.UI = { init, refresh, showDangerModal, showFirstRunModal, showFootprintEditor, showError };
 
-  // ── Startup sequence ───────────────────────────────────────────
+  // ── Startup ────────────────────────────────────────────────────
   function _startup() {
     App.init();
     Scene.init();
