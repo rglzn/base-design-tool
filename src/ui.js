@@ -334,7 +334,7 @@
     if (e.target.closest('#hud')) return;
     const dx = e.clientX - _mouseDownX;
     const dy = e.clientY - _mouseDownY;
-    if (dx * dx + dy * dy > 16) return;
+    if (dx * dx + dy * dy > 25) return;
 
     const hit  = Scene.pickAt(e.clientX, e.clientY);
     if (!hit) return;
@@ -440,8 +440,8 @@
   // ── Viewport wiring ────────────────────────────────────────────
   function _wireViewport() {
     const viewport = document.getElementById('viewport');
-    viewport.addEventListener('mousedown', e => { _mouseDownX = e.clientX; _mouseDownY = e.clientY; });
-    viewport.addEventListener('click', _onViewportClick);
+    viewport.addEventListener('pointerdown', e => { _mouseDownX = e.clientX; _mouseDownY = e.clientY; });
+    viewport.addEventListener('pointerup', _onViewportClick);
   }
 
   // ── Public refresh ─────────────────────────────────────────────
