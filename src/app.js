@@ -82,7 +82,7 @@
   function setTool(tool) {
     if (state.tool === tool) return;
     state.tool = tool;
-    state.selection.clear();
+    if (tool !== 'paint') state.selection.clear();
     _refreshUI();
   }
 
