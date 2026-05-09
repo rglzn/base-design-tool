@@ -254,6 +254,15 @@
     });
   }
 
+  const _INCLINE_TYPES = new Set(['stair-solid','stair-thin','wedge-solid','wedge-thin']);
+
+  function _updateDirectionHud() {
+    const hud   = document.getElementById('hud-direction');
+    const isInc = _INCLINE_TYPES.has(App.state.selectedObject);
+    hud.hidden  = !isInc;
+    if (isInc) document.getElementById('hud-direction-value').textContent = App.state.placeDirection;
+  }
+
   // ── Footprint label ────────────────────────────────────────────
   function _updateFootprintLabel() {
     document.getElementById('footprint-size').textContent = App.footprintLabel();
@@ -361,6 +370,12 @@
       case 'b': case 'B': App.setTool('build');  break;
       case 'd': case 'D': App.setTool('delete'); break;
       case 's': case 'S': App.setTool('select'); break;
+      case 'q': case 'Q':
+        if (_INCLINE_TYPES.has(App.state.selectedObject)) App.rotatePlaceDirection(-1);
+        break;
+      case 'e': case 'E':
+        if (_INCLINE_TYPES.has(App.state.selectedObject)) App.rotatePlaceDirection(1);
+        break;
       case 'Delete':
         if (App.state.tool === 'select' && App.state.selection.size > 0)
           App.deleteSelection();
@@ -424,6 +439,7 @@
     _renderSwatches();
     _updateToolButtons();
     _updateObjectButtons();
+    _updateDirectionHud();
     _updateFootprintLabel();
   }
 

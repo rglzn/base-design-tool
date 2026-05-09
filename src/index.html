@@ -51,11 +51,37 @@
     <section class="sidebar-section" id="section-objects">
       <h3 class="sidebar-heading">Objects</h3>
       <div class="object-grid">
-        <button class="btn-object" id="obj-cube" data-object="cube">
-          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true">
-            <use href="#icon-cube" />
-          </svg>
+        <button class="btn-object active" id="obj-cube" data-object="cube">
+          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-cube" /></svg>
           <span class="object-label">Cube</span>
+        </button>
+        <button class="btn-object" id="obj-wall-plain" data-object="wall-plain">
+          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wall-plain" /></svg>
+          <span class="object-label">Wall</span>
+        </button>
+        <button class="btn-object" id="obj-wall-window" data-object="wall-window">
+          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wall-window" /></svg>
+          <span class="object-label">Window</span>
+        </button>
+        <button class="btn-object" id="obj-wall-doorway" data-object="wall-doorway">
+          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wall-doorway" /></svg>
+          <span class="object-label">Doorway</span>
+        </button>
+        <button class="btn-object" id="obj-stair-solid" data-object="stair-solid">
+          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-stair-solid" /></svg>
+          <span class="object-label">Stair</span>
+        </button>
+        <button class="btn-object" id="obj-stair-thin" data-object="stair-thin">
+          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-stair-thin" /></svg>
+          <span class="object-label">Stair Thin</span>
+        </button>
+        <button class="btn-object" id="obj-wedge-solid" data-object="wedge-solid">
+          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wedge-solid" /></svg>
+          <span class="object-label">Wedge</span>
+        </button>
+        <button class="btn-object" id="obj-wedge-thin" data-object="wedge-thin">
+          <svg class="object-icon" viewBox="0 0 40 40" aria-hidden="true"><use href="#icon-wedge-thin" /></svg>
+          <span class="object-label">Wedge Thin</span>
         </button>
       </div>
     </section>
@@ -79,6 +105,11 @@
     <!-- Three.js renderer canvas appended here by scene.js -->
     <div id="hud">
       <canvas id="compass-canvas" width="80" height="80" aria-label="Compass"></canvas>
+      <div id="hud-direction" class="hud-direction" hidden>
+        <span class="hud-direction-label">Direction</span>
+        <span id="hud-direction-value" class="hud-direction-value">N</span>
+        <span class="hud-direction-hint">Q ↺  E ↻</span>
+      </div>
       <button id="btn-xray" class="btn-hud" disabled title="X-Ray (coming soon)">X-Ray</button>
     </div>
   </main>
@@ -201,12 +232,68 @@
 
     <!-- Cube: isometric three-face view -->
     <symbol id="icon-cube" viewBox="0 0 40 40">
-      <polygon points="20,3 37,12.5 20,22 3,12.5"
-               fill="currentColor" opacity="0.90"/>
-      <polygon points="3,12.5 20,22 20,37 3,27.5"
-               fill="currentColor" opacity="0.55"/>
-      <polygon points="37,12.5 20,22 20,37 37,27.5"
-               fill="currentColor" opacity="0.72"/>
+      <polygon points="20,3 37,12.5 20,22 3,12.5"   fill="currentColor" opacity="0.90"/>
+      <polygon points="3,12.5 20,22 20,37 3,27.5"   fill="currentColor" opacity="0.55"/>
+      <polygon points="37,12.5 20,22 20,37 37,27.5"  fill="currentColor" opacity="0.72"/>
+    </symbol>
+
+    <!-- Wall plain: upright slab, isometric front face + thin top -->
+    <symbol id="icon-wall-plain" viewBox="0 0 40 40">
+      <polygon points="5,10 35,10 35,35 5,35"       fill="currentColor" opacity="0.80"/>
+      <polygon points="5,10 35,10 38,7 8,7"         fill="currentColor" opacity="0.55"/>
+    </symbol>
+
+    <!-- Wall window: plain wall with centred square pane -->
+    <symbol id="icon-wall-window" viewBox="0 0 40 40">
+      <polygon points="5,10 35,10 35,35 5,35"       fill="currentColor" opacity="0.80"/>
+      <polygon points="5,10 35,10 38,7 8,7"         fill="currentColor" opacity="0.55"/>
+      <rect x="13" y="16" width="14" height="12"    fill="currentColor" opacity="0.25"/>
+      <rect x="13" y="16" width="14" height="12"    fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.90"/>
+    </symbol>
+
+    <!-- Wall doorway: plain wall with tall opening reaching the floor -->
+    <symbol id="icon-wall-doorway" viewBox="0 0 40 40">
+      <polygon points="5,10 35,10 35,35 5,35"       fill="currentColor" opacity="0.80"/>
+      <polygon points="5,10 35,10 38,7 8,7"         fill="currentColor" opacity="0.55"/>
+      <rect x="14" y="18" width="12" height="17"    fill="currentColor" opacity="0.25"/>
+      <rect x="14" y="18" width="12" height="17"    fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.90"/>
+    </symbol>
+
+    <!-- Stair solid: isometric filled stepped wedge -->
+    <symbol id="icon-stair-solid" viewBox="0 0 40 40">
+      <!-- bottom step -->
+      <polygon points="3,30 20,21 37,30 20,39"      fill="currentColor" opacity="0.90"/>
+      <polygon points="3,30 20,39 20,34 3,25"       fill="currentColor" opacity="0.55"/>
+      <polygon points="37,30 20,39 20,34 37,25"     fill="currentColor" opacity="0.72"/>
+      <!-- top step -->
+      <polygon points="11,21 20,16 29,21 20,26"     fill="currentColor" opacity="0.90"/>
+      <polygon points="11,21 20,26 20,21 11,16"     fill="currentColor" opacity="0.55"/>
+      <polygon points="29,21 20,26 20,21 29,16"     fill="currentColor" opacity="0.72"/>
+      <!-- peak cap -->
+      <polygon points="20,7 29,12 20,17 11,12"      fill="currentColor" opacity="0.90"/>
+    </symbol>
+
+    <!-- Stair thin: stepped surface only (no solid fill beneath) -->
+    <symbol id="icon-stair-thin" viewBox="0 0 40 40">
+      <polyline points="3,32 3,24 14,18 14,11 26,5 37,11 37,19 26,25 26,32 14,38 3,32"
+                fill="currentColor" opacity="0.30"
+                stroke="currentColor" stroke-width="1.5" opacity="0.90"/>
+    </symbol>
+
+    <!-- Wedge solid: isometric smooth filled wedge -->
+    <symbol id="icon-wedge-solid" viewBox="0 0 40 40">
+      <polygon points="20,4 37,13.5 37,28.5 20,19"  fill="currentColor" opacity="0.90"/>
+      <polygon points="3,28.5 20,19 20,34 3,28.5"   fill="currentColor" opacity="0.55"/>
+      <polygon points="37,13.5 20,19 20,34 37,28.5" fill="currentColor" opacity="0.72"/>
+      <polygon points="3,28.5 20,4 37,13.5 20,19 3,28.5"
+                                                     fill="currentColor" opacity="0.55"/>
+    </symbol>
+
+    <!-- Wedge thin: sloped surface only -->
+    <symbol id="icon-wedge-thin" viewBox="0 0 40 40">
+      <polygon points="3,32 20,6 37,15.5 37,30 20,36 3,32"
+               fill="currentColor" opacity="0.25"
+               stroke="currentColor" stroke-width="1.5"/>
     </symbol>
 
   </svg>

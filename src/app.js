@@ -28,6 +28,7 @@
     // editor-only
     tool:            'build',
     selectedObject:  'cube',
+    placeDirection:  'N',
     selectedColorId: 0,
     selection:       new Set(),
   };
@@ -94,6 +95,7 @@
     state.selection       = new Set();
     state.tool            = 'build';
     state.selectedObject  = 'cube';
+    state.placeDirection  = 'N';
   }
 
   // ── Tool / object / colour ─────────────────────────────────────
@@ -106,6 +108,17 @@
 
   function setSelectedObject(type) {
     state.selectedObject = type;
+    _refreshUI();
+  }
+
+  const _DIRS = ['N', 'E', 'S', 'W'];
+  function setPlaceDirection(dir) {
+    state.placeDirection = dir;
+    _refreshUI();
+  }
+  function rotatePlaceDirection(delta) {
+    const i = _DIRS.indexOf(state.placeDirection);
+    state.placeDirection = _DIRS[(i + delta + 4) % 4];
     _refreshUI();
   }
 
@@ -152,9 +165,10 @@
     const key = `${x},${y},${z}`;
     if (state.cells.has(key)) return false;
     if (!_inFootprint(x, z)) return false;
+    const isIncline = ['stair-solid','stair-thin','wedge-solid','wedge-thin'].includes(state.selectedObject);
     state.cells.set(key, {
       object:    state.selectedObject,
-      direction: null,
+      direction: isIncline ? state.placeDirection : null,
       colorId:   state.selectedColorId,
     });
     _markDirty();
@@ -367,6 +381,7 @@
     state.project         = null;
     state.tool            = 'build';
     state.selectedObject  = 'cube';
+    state.placeDirection  = 'N';
     state.selectedColorId = 0;
     state.selection       = new Set();
     _nextColorId          = DEFAULT_COLOURS.length;
@@ -375,7 +390,7 @@
   // ── Public API ─────────────────────────────────────────────────
   window.App = {
     state,
-    setTool, setSelectedObject, setColor,
+    setTool, setSelectedObject, setPlaceDirection, rotatePlaceDirection, setColor,
     addColor, updateColor, deleteColor, getColorHex,
     placeCell, deleteCell,
     addToSelection, removeFromSelection, clearSelection, deleteSelection,

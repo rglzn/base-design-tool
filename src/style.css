@@ -250,6 +250,42 @@ button:not(:disabled):active {
   border-color: transparent;
 }
 
+/* ── Direction HUD ───────────────────────────────────────────────── */
+.hud-direction {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  background: rgba(14, 18, 24, 0.82);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.hud-direction-label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.hud-direction-value {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 16px;
+  color: var(--accent);
+  min-width: 12px;
+  text-align: center;
+}
+
+.hud-direction-hint {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
 /* ── HUD button ──────────────────────────────────────────────────── */
 .btn-hud {
   pointer-events: all;
@@ -317,7 +353,7 @@ button:not(:disabled):active {
 /* ── Object grid ─────────────────────────────────────────────────── */
 .object-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 5px;
 }
 
