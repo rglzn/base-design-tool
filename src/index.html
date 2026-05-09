@@ -230,6 +230,26 @@
     </div>
   </template>
 
+  <!-- Save Stamp modal -->
+  <template id="tmpl-modal-save-stamp">
+    <div class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span class="modal-title">Save Stamp</span>
+          <button class="btn-icon js-modal-close" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body-text">
+          <input type="text" class="text-input js-stamp-name"
+                 placeholder="Stamp name" maxlength="64" autocomplete="off" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary js-modal-close">Cancel</button>
+          <button class="btn-primary js-stamp-confirm" disabled>Save</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
   <!-- Settings modal -->
   <template id="tmpl-modal-settings">
     <div class="modal-overlay" role="dialog" aria-modal="true">

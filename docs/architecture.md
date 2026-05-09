@@ -23,10 +23,11 @@ Single user, no auth, Supabase persistence, Cloudflare Pages hosting.
 - **Step 5e.1** — Settings modal fixes: overflow/clipping fix; UI Scale slider (0.5–2.0, default 1.0) scales sidebar, panels, text, compass, HUD, shortcuts strip — not the 3D viewport. Persists in localStorage.
 - **Step 5d** — Multi-ghost: Duplicate and Pick Up actions in sidebar. Ghost follows cursor, Q/E rotates 90°, T cycles anchor corner through 4 footprint corners, Z/X shifts ghost up/down one level. Occupied cells silently skipped on placement; ghost red only when every target cell is occupied. On placement, placed pieces become active selection. ESC cancels; Pick Up restores originals on ESC.
 - **Step 5f** — Multi-ghost fixes: Z/X level shifting, skip occupied on placement, post-placement selection.
+- **Step 5g** — Paint tool: new tool in sidebar after Area Select (Build → Delete → Select → Area Select → Paint). Click any placed piece to repaint it to the active colour swatch. With ≥1 pieces selected, a Paint button in the sidebar repaints the whole selection to the active colour. (app.js, ui.js, scene.js)
+- **Step 5g.1** — Paint tool selection fix: switching to Paint tool preserves current selection so sidebar Paint button can immediately repaint it.
 
 ### To Do
 <!-- Step sizing rule: each step should touch ≤3 files and <=5 fixes/features and be completable in one focused session. If a planned step touches more, split it before greenlighting. Prefer narrow correctness over broad ambition. -->
-- **Step 5g** — Paint tool: new tool in sidebar after Area Select (Build → Delete → Select → Area Select → Paint). Click any placed piece to repaint it to the active colour swatch. With ≥1 pieces selected, a Paint button in the sidebar repaints the whole selection to the active colour. (app.js, ui.js, scene.js)
 - **Step 6** — Stamps: creation: select region, name it, save to Supabase. (app.js, ui.js)
 - **Step 7** — Stamps: placement: ghost preview, Q/E rotation, T anchor-corner cycling, red-if-blocked. Reuses multi-ghost infrastructure from 5d. (scene.js, ui.js, app.js)
 - **Step 8** — Perimeter selection (F key).
@@ -114,4 +115,4 @@ Never hardcode colours. Full values in spec.md § CSS.
 ## Current State
 <!-- Keep ≤5 sentences: (a) last completed step, (b) what is broken and why, (c) what current step must accomplish. -->
 
-Steps 5a–5g prerequisites all complete (5a, 5b, 5c, 5d, 5e, 5e.1, 5f). Multi-ghost, Area Select, settings modal, and UI scale all done. Next step is 5g — Paint tool.
+Steps 5a through 5g.1 complete. All selection tools, multi-ghost, paint tool, settings modal, and UI scale done. Next step is 6 — Stamps creation.

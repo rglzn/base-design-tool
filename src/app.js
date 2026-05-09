@@ -33,6 +33,7 @@
     selection:          new Set(),
     showPlacementGhost: true,
     placingMultiGhost:  null,   // null | { cells, anchorIdx, rotation, pickUpKeys }
+    stamps:             [],     // local cache of Supabase stamps table
   };
 
   // Supabase client
@@ -500,6 +501,48 @@
     return _multiGhostTargets(state.placingMultiGhost, originX, originZ);
   }
 
+  // ── Stamps ────────────────────────────────────────────────────────
+  async function loadStamps() {
+    try {
+      const { data, error } = await window._sb
+        .from('stamps')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      state.stamps = data || [];
+      _refreshUI();
+    } catch (err) {
+      if (window.UI) window.UI.showError('Failed to load stamps: ' + err.message);
+    }
+  }
+
+  async function saveStamp(name) {
+    if (!state.selection.size) return;
+    const keys   = [...state.selection];
+    const coords = keys.map(k => k.split(',').map(Number));
+    const minX   = Math.min(...coords.map(c => c[0]));
+    const minY   = Math.min(...coords.map(c => c[1]));
+    const minZ   = Math.min(...coords.map(c => c[2]));
+    const cells  = keys.map((k, i) => {
+      const [x, y, z] = coords[i];
+      const cell = state.cells.get(k);
+      return { x: x - minX, y: y - minY, z: z - minZ,
+               object: cell.object, direction: cell.direction, colorId: cell.colorId };
+    });
+    try {
+      const { data, error } = await window._sb
+        .from('stamps')
+        .insert({ name, data: { cells }, thumbnail: null })
+        .select()
+        .single();
+      if (error) throw error;
+      state.stamps.unshift(data);
+      _refreshUI();
+    } catch (err) {
+      window.UI.showError('Failed to save stamp: ' + err.message);
+    }
+  }
+
   // ── Settings ─────────────────────────────────────────────────────
   const _SETTINGS_KEY = 'bdt_settings';
   const _SETTINGS_DEFAULTS = { panSpeed: 0.15, rotateSpeed: 1.00, zoomSpeed: 1.00, uiScale: 1.0 };
@@ -533,7 +576,9 @@
     state.selectedColorId = 0;
     state.selection       = new Set();
     state.placingMultiGhost = null;
+    state.stamps          = [];
     _nextColorId          = DEFAULT_COLOURS.length;
+    loadStamps();
   }
 
   // ── Public API ─────────────────────────────────────────────────
@@ -548,6 +593,7 @@
     addBlock, removeBlock, blockHasContent, canRemoveBlock, footprintLabel,
     loadActiveProject, loadProject, createFirstProject,
     saveProject, fetchNamedProjects, deleteProject, isCurrentProjectNamed,
+    loadStamps, saveStamp,
     getSettings, saveSettings,
     init,
   };

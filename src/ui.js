@@ -148,6 +148,56 @@
     });
   }
 
+  // ── Save Stamp modal ─────────────────────────────────────────────
+  function _showSaveStampModal() {
+    const overlay = _openModal('tmpl-modal-save-stamp');
+    const input   = overlay.querySelector('.js-stamp-name');
+    const btn     = overlay.querySelector('.js-stamp-confirm');
+
+    btn.disabled = true;
+    input.addEventListener('input', () => {
+      btn.disabled = input.value.trim().length === 0;
+    });
+
+    overlay.querySelectorAll('.js-modal-close')
+      .forEach(el => el.addEventListener('click', _closeModal));
+
+    btn.addEventListener('click', async () => {
+      const name = input.value.trim();
+      if (!name) return;
+      btn.disabled    = true;
+      btn.textContent = 'Saving…';
+      _closeModal();
+      await App.saveStamp(name);
+    });
+
+    setTimeout(() => input.focus(), 60);
+  }
+
+  // ── Stamp list ────────────────────────────────────────────────────
+  function _renderStampList() {
+    const list = document.getElementById('stamp-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const stamps = App.state.stamps;
+    if (!stamps.length) {
+      const empty = document.createElement('p');
+      empty.className  = 'sidebar-readout';
+      empty.textContent = 'No stamps yet.';
+      list.appendChild(empty);
+      return;
+    }
+    stamps.forEach(stamp => {
+      const item = document.createElement('div');
+      item.className   = 'stamp-item';
+      const label = document.createElement('span');
+      label.className  = 'stamp-item-name';
+      label.textContent = stamp.name;
+      item.appendChild(label);
+      list.appendChild(item);
+    });
+  }
+
   // ── Settings modal
   function _showSettingsModal() {
     const overlay = _openModal('tmpl-modal-settings');
@@ -353,6 +403,8 @@
       .classList.toggle('visible', hasSel && !inMG);
     const paintBtn = document.getElementById('btn-paint-selection');
     if (paintBtn) paintBtn.style.display = (hasSel && !inMG && isPaint) ? '' : 'none';
+    const stampBtn = document.getElementById('btn-save-stamp');
+    if (stampBtn) stampBtn.disabled = !hasSel || inMG;
   }
 
   function _updateObjectButtons() {
@@ -704,6 +756,11 @@
       App.repaintCells([...App.state.selection], App.state.selectedColorId);
     });
 
+    document.getElementById('btn-save-stamp').addEventListener('click', () => {
+      if (!App.state.selection.size) return;
+      _showSaveStampModal();
+    });
+
     document.getElementById('toggle-ghost').addEventListener('change', e => {
       App.setShowPlacementGhost(e.target.checked);
       if (!e.target.checked) Scene.setHoverHit(null);
@@ -739,6 +796,7 @@
     _updateObjectButtons();
     _updateDirectionHud();
     _updateFootprintLabel();
+    _renderStampList();
   }
 
   function applyUiScale(scale) {

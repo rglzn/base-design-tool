@@ -1030,3 +1030,24 @@ button.setup-btn:hover {
 .error-banner.visible {
   opacity: 1;
 }
+
+/* ── Stamp list ───────────────────────────────────────────────── */
+.stamp-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 6px;
+  border-radius: 4px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  margin-top: 4px;
+  cursor: default;
+}
+
+.stamp-item-name {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
