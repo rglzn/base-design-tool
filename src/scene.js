@@ -2,13 +2,16 @@
 (function () {
 
   let _renderer, _scene, _camera, _controls;
-  let _groundGroup, _cubeGroup, _wallGroup;
+  let _groundGroup, _cubeGroup, _wallGroup, _inclineGroup;
   let _groundPlane;          // invisible, raycasting target at y=0
   let _cubeGeo, _edgeGeo, _edgeMat;
   let _wallNGeo, _wallWGeo, _wallNEdgeGeo, _wallWEdgeGeo;
+  let _incGeos = {}, _incEdgeGeos = {};
   let _dirty = false;
 
-  const _WALL_TYPES = new Set(['wall-plain', 'wall-window', 'wall-doorway']);
+  const _WALL_TYPES    = new Set(['wall-plain', 'wall-window', 'wall-doorway']);
+  const _INCLINE_TYPES = new Set(['stair-solid', 'stair-thin', 'wedge-solid', 'wedge-thin']);
+  const _DIR_ROT       = { N: 0, E: -Math.PI / 2, S: Math.PI, W: Math.PI / 2 };
 
   // ── Init ───────────────────────────────────────────────────────
   function init() {
@@ -48,12 +51,14 @@
     _scene.add(sun);
 
     // Groups
-    _groundGroup = new THREE.Group();
-    _cubeGroup   = new THREE.Group();
-    _wallGroup   = new THREE.Group();
+    _groundGroup   = new THREE.Group();
+    _cubeGroup     = new THREE.Group();
+    _wallGroup     = new THREE.Group();
+    _inclineGroup  = new THREE.Group();
     _scene.add(_groundGroup);
     _scene.add(_cubeGroup);
     _scene.add(_wallGroup);
+    _scene.add(_inclineGroup);
 
     // Invisible ground plane for raycasting
     const planeGeo = new THREE.PlaneGeometry(2000, 2000);
@@ -67,10 +72,15 @@
     _cubeGeo      = new THREE.BoxGeometry(1, 1, 1);
     _edgeGeo      = new THREE.EdgesGeometry(_cubeGeo);
     _edgeMat      = new THREE.LineBasicMaterial({ color: 0x000000 });
-    _wallNGeo     = new THREE.BoxGeometry(1, 1, 0.06);   // N-edge wall: thin in Z
-    _wallWGeo     = new THREE.BoxGeometry(0.06, 1, 1);   // W-edge wall: thin in X
+    _wallNGeo     = new THREE.BoxGeometry(1, 1, 0.06);
+    _wallWGeo     = new THREE.BoxGeometry(0.06, 1, 1);
     _wallNEdgeGeo = new THREE.EdgesGeometry(_wallNGeo);
     _wallWEdgeGeo = new THREE.EdgesGeometry(_wallWGeo);
+
+    _INCLINE_TYPES.forEach(type => {
+      _incGeos[type]     = _makeInclineGeo(type);
+      _incEdgeGeos[type] = new THREE.EdgesGeometry(_incGeos[type]);
+    });
 
     // Resize
     new ResizeObserver(_resize).observe(viewport);
@@ -113,6 +123,7 @@
     _rebuildGround();
     _rebuildCubes();
     _rebuildWalls();
+    _rebuildInclines();
   }
 
   // ── Ground grid ────────────────────────────────────────────────
@@ -152,6 +163,7 @@
     _cubeGroup.clear();
 
     App.state.cells.forEach((cell, key) => {
+      if (cell.object !== 'cube') return;
       const [x, y, z] = key.split(',').map(Number);
       const mat = new THREE.MeshLambertMaterial({
         color: new THREE.Color(App.getColorHex(cell.colorId)),
@@ -160,10 +172,7 @@
       mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
       mesh.userData.key    = key;
       mesh.userData.isCube = true;
-
-      // EdgesGeometry outline — part of the visual identity
       mesh.add(new THREE.LineSegments(_edgeGeo, _edgeMat));
-
       _cubeGroup.add(mesh);
     });
   }
@@ -217,6 +226,78 @@
     });
   }
 
+  // ── Incline geometry builder ───────────────────────────────────
+  // Geometry centred at origin, [-0.5, 0.5] on all axes.
+  // All inclines oriented for direction N (slope rises toward -z).
+  // Rotation applied per-mesh at render time.
+  function _makeInclineGeo(type) {
+    const pos = [];
+    function q(a,b,c,d){ pos.push(...a,...b,...c,...a,...c,...d); }
+    function t(a,b,c)  { pos.push(...a,...b,...c); }
+
+    if (type === 'wedge-solid' || type === 'wedge-thin') {
+      t([-0.5,-0.5, 0.5],[-0.5, 0.5,-0.5],[-0.5,-0.5,-0.5]);          // west
+      t([ 0.5,-0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5, 0.5]);          // east
+      q([-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // slope
+      if (type === 'wedge-solid') {
+        q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5,-0.5, 0.5],[-0.5,-0.5, 0.5]); // bottom
+        q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]); // north face
+      }
+    }
+
+    if (type === 'stair-solid' || type === 'stair-thin') {
+      // 2 equal steps; step 2 at z=[-0.5,0] y=[0,0.5], step 1 at z=[0,0.5] y=[-0.5,0]
+      q([-0.5, 0.5, 0  ],[ 0.5, 0.5, 0  ],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // step 2 top
+      q([-0.5, 0,   0  ],[ 0.5, 0,   0  ],[ 0.5, 0.5, 0  ],[-0.5, 0.5, 0  ]); // riser
+      q([-0.5, 0,   0.5],[ 0.5, 0,   0.5],[ 0.5, 0,   0  ],[-0.5, 0,   0  ]); // step 1 top
+      // West L-shape, fan from (-0.5,-0.5,-0.5)
+      t([-0.5,-0.5,-0.5],[-0.5,-0.5, 0.5],[-0.5, 0,   0.5]);
+      t([-0.5,-0.5,-0.5],[-0.5, 0,   0.5],[-0.5, 0,   0  ]);
+      t([-0.5,-0.5,-0.5],[-0.5, 0,   0  ],[-0.5, 0.5, 0  ]);
+      t([-0.5,-0.5,-0.5],[-0.5, 0.5, 0  ],[-0.5, 0.5,-0.5]);
+      // East L-shape, fan from (0.5,-0.5,-0.5)
+      t([ 0.5,-0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0  ]);
+      t([ 0.5,-0.5,-0.5],[ 0.5, 0.5, 0  ],[ 0.5, 0,   0  ]);
+      t([ 0.5,-0.5,-0.5],[ 0.5, 0,   0  ],[ 0.5, 0,   0.5]);
+      t([ 0.5,-0.5,-0.5],[ 0.5, 0,   0.5],[ 0.5,-0.5, 0.5]);
+      if (type === 'stair-solid') {
+        q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5,-0.5, 0.5],[-0.5,-0.5, 0.5]); // bottom
+        q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]); // north
+        q([-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5, 0,   0.5],[-0.5, 0,   0.5]); // south
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  // ── Incline meshes ─────────────────────────────────────────────
+  function _rebuildInclines() {
+    _inclineGroup.traverse(obj => {
+      if (obj.isMesh && obj.material) obj.material.dispose();
+    });
+    _inclineGroup.clear();
+
+    App.state.cells.forEach((cell, key) => {
+      if (!_INCLINE_TYPES.has(cell.object)) return;
+      const [x, y, z] = key.split(',').map(Number);
+      const isThin = cell.object === 'stair-thin' || cell.object === 'wedge-thin';
+      const mat  = new THREE.MeshLambertMaterial({
+        color: new THREE.Color(App.getColorHex(cell.colorId)),
+        side:  isThin ? THREE.DoubleSide : THREE.FrontSide,
+      });
+      const mesh = new THREE.Mesh(_incGeos[cell.object], mat);
+      mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+      mesh.rotation.y      = _DIR_ROT[cell.direction] ?? 0;
+      mesh.userData.key    = key;
+      mesh.userData.isIncline = true;
+      mesh.add(new THREE.LineSegments(_incEdgeGeos[cell.object], _edgeMat));
+      _inclineGroup.add(mesh);
+    });
+  }
+
   // ── Raycasting ─────────────────────────────────────────────────
   /*
    * Returns null on miss.
@@ -250,8 +331,10 @@
       return { type: 'wall', key: wallKey, normal, buildTarget: null };
     }
 
-    // Cubes (non-recursive — outlines are children, not needed here)
-    const cubeHits = ray.intersectObjects(_cubeGroup.children, false);
+    // Cubes + inclines (non-recursive — outlines are children)
+    const cubeHits = ray.intersectObjects(
+      [..._cubeGroup.children, ..._inclineGroup.children], false
+    );
     if (cubeHits.length > 0) {
       const hit  = cubeHits[0];
       const key  = hit.object.userData.key;
