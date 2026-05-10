@@ -917,19 +917,34 @@ button.setup-btn:hover {
   border-color: var(--danger2) !important;
 }
 
-/* ── Selection actions (Duplicate / Pick Up) ─────────────────── */
-.selection-actions {
+/* ── Selection actions bar ───────────────────────────────────── */
+.selection-actions-bar {
   display: none;
+}
+
+.selection-actions-bar.visible {
+  display: block;
+}
+
+.selection-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 4px;
-  margin-top: 6px;
 }
 
-.selection-actions.visible {
-  display: flex;
+.selection-actions-grid .btn-sm {
+  width: 100%;
 }
 
-.selection-actions .btn-sm {
-  flex: 1;
+.btn-selection-delete {
+  color: var(--danger);
+  border-color: var(--danger2);
+}
+
+.btn-selection-delete:not(:disabled):hover {
+  background: var(--danger2);
+  border-color: var(--danger);
+  color: #fff;
 }
 
 /* ── Area select rectangle overlay ──────────────────────────────── */

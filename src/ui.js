@@ -398,11 +398,8 @@
   function _updateSelectionActions() {
     const hasSel = App.state.selection.size > 0;
     const inMG   = !!App.state.placingMultiGhost;
-    const isPaint = App.state.tool === 'paint';
-    document.getElementById('selection-actions')
+    document.getElementById('selection-actions-bar')
       .classList.toggle('visible', hasSel && !inMG);
-    const paintBtn = document.getElementById('btn-paint-selection');
-    if (paintBtn) paintBtn.style.display = (hasSel && !inMG && isPaint) ? '' : 'none';
     const stampBtn = document.getElementById('btn-save-stamp');
     if (stampBtn) stampBtn.disabled = !hasSel || inMG;
   }
@@ -754,6 +751,10 @@
     document.getElementById('btn-paint-selection').addEventListener('click', () => {
       if (!App.state.selection.size) return;
       App.repaintCells([...App.state.selection], App.state.selectedColorId);
+    });
+    document.getElementById('btn-delete-selection').addEventListener('click', () => {
+      if (!App.state.selection.size) return;
+      App.deleteSelection();
     });
 
     document.getElementById('btn-save-stamp').addEventListener('click', () => {
