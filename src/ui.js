@@ -94,6 +94,7 @@
   // ── Modal state ────────────────────────────────────────────────
   let _activeModal = null;
   let _errorTimer  = null;
+  let _uiScale     = 1;
 
   function _openModal(templateId) {
     if (_activeModal) _closeModal();
@@ -101,6 +102,8 @@
     const overlay = tmpl.content.cloneNode(true).querySelector('.modal-overlay');
     document.body.appendChild(overlay);
     _activeModal  = overlay;
+    const box = overlay.querySelector('.modal-box');
+    if (box && _uiScale !== 1) box.style.zoom = _uiScale;
     if (!overlay.classList.contains('modal-overlay--locked')) {
       overlay.addEventListener('click', e => {
         if (e.target === overlay) _closeModal();
@@ -749,12 +752,24 @@
       App.startMultiGhost(true);
     });
     document.getElementById('btn-paint-selection').addEventListener('click', () => {
-      if (!App.state.selection.size) return;
-      App.repaintCells([...App.state.selection], App.state.selectedColorId);
+      const count = App.state.selection.size;
+      if (!count) return;
+      const go = () => App.repaintCells([...App.state.selection], App.state.selectedColorId);
+      if (count > 10) {
+        showDangerModal(`This will repaint ${count} pieces. Are you sure?`, go);
+      } else {
+        go();
+      }
     });
     document.getElementById('btn-delete-selection').addEventListener('click', () => {
-      if (!App.state.selection.size) return;
-      App.deleteSelection();
+      const count = App.state.selection.size;
+      if (!count) return;
+      const go = () => App.deleteSelection();
+      if (count > 10) {
+        showDangerModal(`This will delete ${count} pieces. Are you sure?`, go);
+      } else {
+        go();
+      }
     });
 
     document.getElementById('btn-save-stamp').addEventListener('click', () => {
@@ -801,6 +816,7 @@
   }
 
   function applyUiScale(scale) {
+    _uiScale = scale;
     const els = [
       document.getElementById('sidebar'),
       document.getElementById('topbar'),
@@ -815,7 +831,7 @@
     });
     // Sidebar width: keep the grid column in sync so the viewport never overlaps
     document.documentElement.style.setProperty('--sidebar', (264 * scale) + 'px');
-    // Scale any open settings modal
+    // Scale any currently open modal
     const modal = document.querySelector('.modal-overlay .modal-box');
     if (modal) modal.style.zoom = scale;
   }

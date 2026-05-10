@@ -26,8 +26,12 @@ Single user, no auth, Supabase persistence, Cloudflare Pages hosting.
 - **Step 5g** — Paint tool: new tool in sidebar after Area Select (Build → Delete → Select → Area Select → Paint). Click any placed piece to repaint it to the active colour swatch. With ≥1 pieces selected, a Paint button in the sidebar repaints the whole selection to the active colour. (app.js, ui.js, scene.js)
 - **Step 5g.1** — Paint tool selection fix: switching to Paint tool preserves current selection so sidebar Paint button can immediately repaint it.
 
+- **Step 5h** — Selection actions bar: persistent bar in sidebar showing whenever ≥1 pieces are selected (regardless of active tool). Four buttons: Duplicate, Pick Up, Paint (bulk repaint to active swatch), Delete. Bar hidden when selection is empty.
+- **Step 5i** — Confirmation modal for large selections: Delete and Paint (bulk) actions affecting >10 pieces show a confirmation modal before proceeding. ≤10 pieces proceed immediately.
+
 ### To Do
 <!-- Step sizing rule: each step should touch ≤3 files and <=5 fixes/features and be completable in one focused session. If a planned step touches more, split it before greenlighting. Prefer narrow correctness over broad ambition. -->
+- **Next session** — Discuss with Architect: add 4 new shapes — corner wedge, inverted corner wedge, cube with window face, cube with doorway face. Design geometry, rotation states, and sidebar integration before any Dev work. Discuss save functionality: multiple saves cannot have the same name, ask for overwrite confirmation to user
 - **Step 6** — Stamps: creation: select region, name it, save to Supabase. (app.js, ui.js)
 - **Step 7** — Stamps: placement: ghost preview, Q/E rotation, T anchor-corner cycling, red-if-blocked. Reuses multi-ghost infrastructure from 5d. (scene.js, ui.js, app.js)
 - **Step 8** — Perimeter selection (F key).
@@ -115,4 +119,4 @@ Never hardcode colours. Full values in spec.md § CSS.
 ## Current State
 <!-- Keep ≤5 sentences: (a) last completed step, (b) what is broken and why, (c) what current step must accomplish. -->
 
-Steps 5a through 5g.1 complete. All selection tools, multi-ghost, paint tool, settings modal, and UI scale done. Next step is 6 — Stamps creation.
+Steps 5a through 5i complete. All selection tools, multi-ghost, paint tool, selection actions bar, confirmation modal, settings modal, and UI scale done. Next session: discuss corner wedge, inverted corner wedge, cube with window, cube with doorway shapes with Architect before any Dev work, discuss save functionality: multiple saves cannot have the same name, ask for overwrite confirmation to user, then proceed to Step 6 (Stamps).
