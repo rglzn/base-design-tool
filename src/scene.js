@@ -33,7 +33,7 @@
     _controls = new THREE.OrbitControls(_camera, _renderer.domElement);
     _controls.target.set(5, 0, 5);
     _controls.enableDamping  = true;
-    _controls.dampingFactor  = 0.08;
+    _controls.dampingFactor  = 0.07;
     _controls.screenSpacePanning = true;
     _controls.mouseButtons = {
       LEFT:   THREE.MOUSE.PAN,
@@ -77,6 +77,11 @@
       _incGeos[type]     = _makeInclineGeo(type);
       _incEdgeGeos[type] = new THREE.EdgesGeometry(_incGeos[type]);
     });
+    const _boxGeo = new THREE.BoxGeometry(1, 1, 1);
+    _incGeos['cube-doorway'] = _boxGeo;
+    _incGeos['cube-window']  = _boxGeo;
+    _incEdgeGeos['cube-doorway'] = new THREE.EdgesGeometry(_boxGeo);
+    _incEdgeGeos['cube-window']  = new THREE.EdgesGeometry(_boxGeo);
 
     document.addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -218,9 +223,9 @@
     }
 
     if (type === 'wedge-solid-inverted') {
-      t([-0.5,+0.5,+0.5], [-0.5,-0.5,-0.5], [-0.5,+0.5,-0.5]);          // left tri
-      t([+0.5,+0.5,-0.5], [+0.5,-0.5,-0.5], [+0.5,+0.5,+0.5]);          // right tri
-      q([-0.5,+0.5,+0.5], [+0.5,+0.5,+0.5], [+0.5,-0.5,-0.5], [-0.5,-0.5,-0.5]); // slope
+      t([-0.5,+0.5,+0.5], [-0.5,+0.5,-0.5], [-0.5,-0.5,-0.5]);          // left tri
+      t([+0.5,+0.5,+0.5], [+0.5,-0.5,-0.5], [+0.5,+0.5,-0.5]);          // right tri
+      q([-0.5,-0.5,-0.5], [+0.5,-0.5,-0.5], [+0.5,+0.5,+0.5], [-0.5,+0.5,+0.5]); // slope
       q([-0.5,+0.5,+0.5], [+0.5,+0.5,+0.5], [+0.5,+0.5,-0.5], [-0.5,+0.5,-0.5]); // top flat
       q([-0.5,+0.5,-0.5], [+0.5,+0.5,-0.5], [+0.5,-0.5,-0.5], [-0.5,-0.5,-0.5]); // back
     }
@@ -286,7 +291,7 @@
       // Corner wedge flipped vertically. Full top face, apex at local NW bottom corner (-0.5, -0.5, -0.5).
       const apex = [-0.5, -0.5, -0.5];
       // Top face (y = +0.5), normal up
-      q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]);
+      q([-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]);
       // South face (z = +0.5 edge → apex): diagonal slope
       t([ 0.5, 0.5, 0.5], [-0.5, 0.5, 0.5], apex);
       // East face (x = +0.5 edge → apex): diagonal slope
@@ -300,7 +305,7 @@
     if (type === 'cube-doorway') {
       // Full cube geometry (same as BoxGeometry but manual, so EdgesGeometry works uniformly).
       // Decorative arch outline added as extra line geometry separately in _rebuildInclines.
-      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // back
+      q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5],[-0.5,-0.5,-0.5]); // back
       q([-0.5,-0.5, 0.5],[-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5,-0.5, 0.5]); // front
       q([-0.5,-0.5,-0.5],[-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5,-0.5,-0.5]); // bottom
       q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]); // top
@@ -310,7 +315,7 @@
 
     if (type === 'cube-window') {
       // Same full cube geometry as cube-doorway.
-      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // back
+      q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5],[-0.5,-0.5,-0.5]); // back
       q([-0.5,-0.5, 0.5],[-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5,-0.5, 0.5]); // front
       q([-0.5,-0.5,-0.5],[-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5,-0.5,-0.5]); // bottom
       q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]); // top
@@ -362,31 +367,34 @@
     const bot = -0.5;   // bottom of cell
 
     if (type === 'cube-doorway') {
-      // Two vertical legs + semicircular arch.
-      const legTop = bot + 0.455; // spring line at ~70% height
-      pts.push(-hw, bot, z,  -hw, legTop, z);
-      pts.push( hw, bot, z,   hw, legTop, z);
-      const archR  = hw;
-      const archCY = legTop;
-      const segs   = 16;
-      for (let i = 0; i < segs; i++) {
-        const a0 = Math.PI + (i / segs) * Math.PI;
-        const a1 = Math.PI + ((i + 1) / segs) * Math.PI;
-        pts.push(
-          archR * Math.cos(a0), archCY + archR * Math.sin(a0), z,
-          archR * Math.cos(a1), archCY + archR * Math.sin(a1), z
-        );
-      }
+      // Three edges only: left vertical, right vertical, top horizontal.
+      // ~70% face width (hw = 0.35), full face height (-0.5 to +0.5). No bottom edge.
+      const top = 0.40;
+      const hw2 = hw - 0.05;
+      pts.push(-hw,  bot, z,  -hw,  top, z);  // outer left
+      pts.push( hw,  bot, z,   hw,  top, z);  // outer right
+      pts.push(-hw,  top, z,   hw,  top, z);  // outer top
+      const top2 = top - 0.05;
+      pts.push(-hw2, bot,  z,  -hw2, top2, z);  // inner left
+      pts.push( hw2, bot,  z,   hw2, top2, z);  // inner right
+      pts.push(-hw2, top2, z,   hw2, top2, z);  // inner top
     }
 
     if (type === 'cube-window') {
       // Rectangle outline centred on the south face.
       const y0 = -0.175;
       const y1 =  0.35;
-      pts.push(-hw, y0, z,   hw, y0, z);
-      pts.push( hw, y0, z,   hw, y1, z);
-      pts.push( hw, y1, z,  -hw, y1, z);
-      pts.push(-hw, y1, z,  -hw, y0, z);
+      const hw2 = hw - 0.05;
+      const y02 = y0 + 0.05;
+      const y12 = y1 - 0.05;
+      pts.push(-hw,  y0,  z,   hw,  y0,  z);  // outer bottom
+      pts.push( hw,  y0,  z,   hw,  y1,  z);  // outer right
+      pts.push( hw,  y1,  z,  -hw,  y1,  z);  // outer top
+      pts.push(-hw,  y1,  z,  -hw,  y0,  z);  // outer left
+      pts.push(-hw2, y02, z,   hw2, y02, z);  // inner bottom
+      pts.push( hw2, y02, z,   hw2, y12, z);  // inner right
+      pts.push( hw2, y12, z,  -hw2, y12, z);  // inner top
+      pts.push(-hw2, y12, z,  -hw2, y02, z);  // inner left
     }
 
     if (!pts.length) return;
@@ -421,9 +429,26 @@
       const [x, y, z] = key.split(',').map(Number);
       const type = hit.object.userData.isIncline ? 'incline' : 'cube';
       const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).round();
-      const tx = x + Math.round(normal.x);
-      const ty = y + Math.round(normal.y);
-      const tz = z + Math.round(normal.z);
+      // Diagonal faces (slope/corner types) can produce a rounded normal with magnitude > 1
+      // (two axes both round to ±1), or the dominant-axis of the normal can disagree with
+      // which face the cursor is actually nearest to.  Use the hit point's offset from the
+      // cell centre as the ground truth: whichever axis shows the largest absolute deviation
+      // from the cell centre is the face that was hit, and its sign gives the direction.
+      let tx, ty, tz;
+      if (Math.abs(normal.x) + Math.abs(normal.y) + Math.abs(normal.z) > 1) {
+        const cellCx = x + 0.5, cellCy = y + 0.5, cellCz = z + 0.5;
+        const dx = hit.point.x - cellCx;
+        const dy = hit.point.y - cellCy;
+        const dz = hit.point.z - cellCz;
+        const ax = Math.abs(dx), ay = Math.abs(dy), az = Math.abs(dz);
+        if (ax >= ay && ax >= az)      { tx = x + Math.sign(dx); ty = y; tz = z; }
+        else if (az >= ax && az >= ay) { tx = x; ty = y; tz = z + Math.sign(dz); }
+        else                           { tx = x; ty = y + Math.sign(dy); tz = z; }
+      } else {
+        tx = x + Math.round(normal.x);
+        ty = y + Math.round(normal.y);
+        tz = z + Math.round(normal.z);
+      }
       const targetKey   = `${tx},${ty},${tz}`;
       const buildTarget = App.state.cells.has(targetKey) ? null : targetKey;
       return { type, key, normal, targetKey, buildTarget };

@@ -165,19 +165,25 @@
     overlay.querySelectorAll('.js-modal-close')
       .forEach(el => el.addEventListener('click', _closeModal));
 
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const name = input.value.trim();
       if (!name) return;
-      btn.disabled    = true;
-      btn.textContent = 'Saving…';
       _closeModal();
-      await App.saveStamp(name);
+      const existing = App.getStampByName(name);
+      if (existing) {
+        showDangerModal(
+          `A stamp named "${name}" already exists. Overwrite it?`,
+          async () => { await App.saveStamp(name, true); }
+        );
+      } else {
+        App.saveStamp(name, false);
+      }
     });
 
     setTimeout(() => input.focus(), 60);
   }
 
-  // ── Stamp list ────────────────────────────────────────────────────
+  // ── Stamp grid ────────────────────────────────────────────────────
   function _renderStampList() {
     const list = document.getElementById('stamp-list');
     if (!list) return;
@@ -185,20 +191,46 @@
     const stamps = App.state.stamps;
     if (!stamps.length) {
       const empty = document.createElement('p');
-      empty.className  = 'sidebar-readout';
+      empty.className  = 'stamp-list-empty';
       empty.textContent = 'No stamps yet.';
       list.appendChild(empty);
       return;
     }
+    const grid = document.createElement('div');
+    grid.className = 'stamp-grid';
     stamps.forEach(stamp => {
-      const item = document.createElement('div');
-      item.className   = 'stamp-item';
-      const label = document.createElement('span');
-      label.className  = 'stamp-item-name';
-      label.textContent = stamp.name;
-      item.appendChild(label);
-      list.appendChild(item);
+      const tile = document.createElement('div');
+      tile.className = 'stamp-tile';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'stamp-tile-thumb';
+      tile.appendChild(thumb);
+
+      const nameEl = document.createElement('div');
+      nameEl.className   = 'stamp-tile-name';
+      nameEl.textContent = stamp.name;
+      tile.appendChild(nameEl);
+
+      const delBtn = document.createElement('button');
+      delBtn.className   = 'stamp-tile-delete';
+      delBtn.textContent = '×';
+      delBtn.title       = 'Delete stamp';
+      delBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        showDangerModal(
+          `Delete stamp "${stamp.name}"? This cannot be undone.`,
+          () => App.deleteStamp(stamp.id)
+        );
+      });
+      tile.appendChild(delBtn);
+
+      tile.addEventListener('click', () => {
+        App.activateStampPlacement(stamp);
+      });
+
+      grid.appendChild(tile);
     });
+    list.appendChild(grid);
   }
 
   // ── Settings modal

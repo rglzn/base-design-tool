@@ -415,6 +415,15 @@
     if (!mg) return false;
     const targets = _multiGhostTargets(mg, originX, originZ);
     if (!targets) return false;
+    // Stamp: block placement if any target is occupied or out of footprint
+    if (mg.isStamp) {
+      const allClear = targets.every(({ key }) => {
+        if (state.cells.has(key)) return false;
+        const [x, , z] = key.split(',').map(Number);
+        return _inFootprint(x, z);
+      });
+      if (!allClear) return false;
+    }
     const placedKeys = [];
     targets.forEach(({ key, cell }) => {
       if (state.cells.has(key)) return;
@@ -489,7 +498,15 @@
     if (!mg) return false;
     const targets = _multiGhostTargets(mg, originX, originZ);
     if (!targets || !targets.length) return false;
-    // Valid if at least one target cell is free and in-footprint
+    if (mg.isStamp) {
+      // Stamp: red if any target cell is occupied or out of footprint
+      return targets.every(({ key }) => {
+        if (state.cells.has(key)) return false;
+        const [x, , z] = key.split(',').map(Number);
+        return _inFootprint(x, z);
+      });
+    }
+    // Multi-ghost: red only when every target cell is occupied
     return targets.some(({ key }) => {
       if (state.cells.has(key)) return false;
       const [x, , z] = key.split(',').map(Number);
@@ -516,7 +533,11 @@
     }
   }
 
-  async function saveStamp(name) {
+  function getStampByName(name) {
+    return state.stamps.find(s => s.name === name) || null;
+  }
+
+  async function saveStamp(name, overwrite) {
     if (!state.selection.size) return;
     const keys   = [...state.selection];
     const coords = keys.map(k => k.split(',').map(Number));
@@ -530,9 +551,25 @@
                object: cell.object, direction: cell.direction, colorId: cell.colorId };
     });
     try {
+      if (overwrite) {
+        const existing = getStampByName(name);
+        if (existing) {
+          const { data, error } = await window._sb
+            .from('stamps')
+            .update({ data: { cells }, updated_at: new Date().toISOString() })
+            .eq('id', existing.id)
+            .select()
+            .single();
+          if (error) throw error;
+          const idx = state.stamps.findIndex(s => s.id === existing.id);
+          if (idx !== -1) state.stamps[idx] = data;
+          _refreshUI();
+          return;
+        }
+      }
       const { data, error } = await window._sb
         .from('stamps')
-        .insert({ name, data: { cells }, thumbnail: null })
+        .insert({ name, data: { cells } })
         .select()
         .single();
       if (error) throw error;
@@ -540,6 +577,41 @@
       _refreshUI();
     } catch (err) {
       window.UI.showError('Failed to save stamp: ' + err.message);
+    }
+  }
+
+  function activateStampPlacement(stamp) {
+    if (!stamp || !stamp.data || !stamp.data.cells || !stamp.data.cells.length) return;
+    if (state.placingMultiGhost) {
+      const { pickUpKeys } = state.placingMultiGhost;
+      if (pickUpKeys) {
+        pickUpKeys.forEach(({ key, cell }) => state.cells.set(key, cell));
+        _markDirty();
+      }
+    }
+    state.selection.clear();
+    const cells = stamp.data.cells.map(c => ({
+      dx: c.x, dy: c.y, dz: c.z,
+      object: c.object, direction: c.direction, colorId: c.colorId,
+    }));
+    state.placingMultiGhost = {
+      cells,
+      anchorIdx:  0,
+      rotation:   0,
+      pickUpKeys: null,
+      isStamp:    true,
+    };
+    _refreshUI();
+  }
+
+  async function deleteStamp(id) {
+    try {
+      const { error } = await window._sb.from('stamps').delete().eq('id', id);
+      if (error) throw error;
+      state.stamps = state.stamps.filter(s => s.id !== id);
+      _refreshUI();
+    } catch (err) {
+      window.UI.showError('Failed to delete stamp: ' + err.message);
     }
   }
 
@@ -593,7 +665,7 @@
     addBlock, removeBlock, blockHasContent, canRemoveBlock, footprintLabel,
     loadActiveProject, loadProject, createFirstProject,
     saveProject, fetchNamedProjects, deleteProject, isCurrentProjectNamed,
-    loadStamps, saveStamp,
+    loadStamps, saveStamp, deleteStamp, getStampByName, activateStampPlacement,
     getSettings, saveSettings,
     init,
   };

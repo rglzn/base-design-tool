@@ -1,7 +1,7 @@
 # Base Design Tool — Architecture
 # v3.1 · 2026-05-09
 
-Browser-based 3D voxel base planner for Dune Awakening guild bases.
+Browser-based 3D voxel base planner for Dune Awakening.
 Single user, no auth, Supabase persistence, Cloudflare Pages hosting.
 
 ---
@@ -32,15 +32,19 @@ Single user, no auth, Supabase persistence, Cloudflare Pages hosting.
 - **Step 6a** — Register four new object types in app.js + ui.js: corner-wedge, corner-wedge-inverted, cube-doorway, cube-window. Added to state valid types, direction handling (all four directional N/E/S/W), and Objects sidebar (text labels, eight types total).
 - **Step 6b** — Geometry for all four new types in scene.js: corner-wedge, corner-wedge-inverted, cube-doorway, cube-window.
 
+- **Step 6b.1** — Bug fix (scene.js): winding order investigation, partial.
+- **Step 6b.2** — Bug fixes (scene.js): doorway decoration corrected to three-edge door frame; further winding investigation.
+- **Step 6b.3** — Bug fix (scene.js): all winding order issues resolved. cube-doorway and cube-window replaced with THREE.BoxGeometry. Three manual face flips on wedge-solid-inverted (right tri, slope, back) and one on corner-wedge-inverted (top). All eight types now fully correct.
+
+- **Step 7** — Stamps: creation and management. Save selection → name prompt → normalise to origin → Supabase. Stamp list in sidebar with Place (no-op) and Delete (danger modal). Name uniqueness check. style.css stamp row styles.
+- **Step 8** — Stamps: placement + 2-column grid UI. Ghost follows cursor, Q/E rotates, T cycles anchor corner, red-if-blocked, click to place. Clicking tile activates placement ghost. Delete × on tile corner with danger modal. Thumbnails removed. Reuses multi-ghost infrastructure from 5d.
+
 ### To Do
-<!-- Step sizing rule: each step should touch ≤3 files and <=5 fixes/features and be completable in one focused session. If a planned step touches more, split it before greenlighting. Prefer narrow correctness over broad ambition. -->
-- **Step 6b.1** — Bug fix (scene.js): side-face placement on inverted corner wedge places ghost/object on opposite face. Incorrect buildTarget cell offset due to unexpected face normal direction on sloped geometry. (scene.js)
-- **Step 7** — Stamps: creation: select region, name it, save to Supabase. (app.js, ui.js)
-- **Step 8** — Stamps: placement: ghost preview, Q/E rotation, T anchor-corner cycling, red-if-blocked. Reuses multi-ghost infrastructure from 5d. (scene.js, ui.js, app.js)
 - **Step 9** — Perimeter selection (F key).
 - **Step 10** — X-ray toggle.
 - **Step 11** — Clear all (destructive modal).
 - **Step 12** — Hotkey strip rework: fully dynamic display based on active tool and selected object type. Resolves all known info-bar conflicts.
+- **Step 13** — Stair side face lines: currently drawn as 8 per-step quads per side, producing visible step lines on the triangular side faces. Cosmetic only — replace with single triangle per side. Needs careful handling to avoid breaking EdgesGeometry or raycasting.
 
 ---
 
@@ -122,4 +126,11 @@ Never hardcode colours. Full values in spec.md § CSS.
 ## Current State
 <!-- Keep ≤5 sentences: (a) last completed step, (b) what is broken and why, (c) what current step must accomplish. -->
 
-Steps 6a and 6b complete. All eight object types registered and rendering. Known bug: side-face placement on corner-wedge-inverted places object on opposite face — fix in Step 6b.1 (scene.js, buildTarget logic).
+Steps 6a through 6b.3 and Steps 7–8 complete. All eight object types working. Stamps fully implemented (save, list, delete, placement, no thumbnails). Zoom damping tuned. Ready for Step 9 (Perimeter selection).
+
+---
+
+## Future Ideas
+<!-- Parked concepts that would require significant architectural change or are out of scope for now. -->
+
+- **Triangular objects** — equilateral triangles that attach to existing object faces and create half-unit offsets, with other objects inheriting those offsets. Would break the cubic voxel grid (integer x,y,z keys), raycasting, placement, stamps, and footprint systems. Requires a parallel coordinate system or adjacency graph. Significant partial rebuild — revisit if the tool evolves beyond rectangular base planning.

@@ -493,14 +493,6 @@ button:not(:disabled):active {
   background: var(--accent);
 }
 
-/* ── Stamp list ──────────────────────────────────────────────────── */
-#stamp-list {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
 /* ── Setup screen ────────────────────────────────────────────────── */
 #setup-screen {
   position: absolute;
@@ -1047,22 +1039,153 @@ button.setup-btn:hover {
 }
 
 /* ── Stamp list ───────────────────────────────────────────────── */
+#stamp-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+#stamp-list::-webkit-scrollbar       { width: 3px; }
+#stamp-list::-webkit-scrollbar-track { background: transparent; }
+#stamp-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.stamp-list-empty {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: 'Rajdhani', sans-serif;
+  padding: 4px 0;
+}
+
 .stamp-item {
   display: flex;
   align-items: center;
+  gap: 6px;
   padding: 5px 6px;
   border-radius: 4px;
   background: var(--panel2);
   border: 1px solid var(--border);
-  margin-top: 4px;
-  cursor: default;
+  min-width: 0;
 }
 
 .stamp-item-name {
+  flex: 1;
   font-family: 'Rajdhani', sans-serif;
   font-size: 13px;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.stamp-item-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.btn-stamp-place {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  color: var(--text-dim);
+}
+
+.btn-stamp-delete {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text-dim);
+  line-height: 1;
+}
+
+.btn-stamp-delete:not(:disabled):hover {
+  color: var(--danger);
+  border-color: var(--danger2);
+  background: transparent;
+}
+
+.stamp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.stamp-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.stamp-tile:hover {
+  border-color: var(--accent2);
+}
+
+.stamp-tile-thumb {
+  display: none;
+}
+
+.stamp-tile-name {
+  padding: 4px 6px 5px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-word;
+  line-height: 1.3;
+}
+
+.stamp-tile-delete {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  background: rgba(9, 11, 14, 0.72);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+  cursor: pointer;
+}
+
+.stamp-tile:hover .stamp-tile-delete {
+  opacity: 1;
+}
+
+.stamp-tile-delete:hover {
+  color: var(--danger);
+  border-color: var(--danger2);
+  background: rgba(9, 11, 14, 0.9);
+}
+
+#stamp-list {
+  max-height: 320px;
+  display: block;
+  flex-direction: unset;
+  gap: unset;
 }

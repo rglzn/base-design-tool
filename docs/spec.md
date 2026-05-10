@@ -46,7 +46,7 @@ Top to bottom: Tools → Colours → Objects → Stamps → View → Footprint.
 Tools: Build, Delete, Select.
 Colours: unnamed swatches grid, Add button.
 Objects: four types (Cube, Stair solid, Wedge solid, Wedge solid inverted), text labels only — no icons or thumbnails. All four shown from Step 3 onward.
-Stamps: Save selection button (enabled when selection non-empty), list of saved stamps.
+Stamps: Save selection button (enabled when selection non-empty), scrollable list of saved stamps. Each stamp row shows name, place button, delete button (destructive modal).
 View: toggles for editor-only state. Contains: Show placement ghost (default on), X-ray (default off). X-ray renders all objects at reduced opacity so occluded structure is visible — implemented in Step 7.
 Footprint: landclaim count readout, Edit button.
 
@@ -65,7 +65,7 @@ Wedge solid — filled block with a smooth diagonal slope from low-front to high
 Wedge solid inverted — filled block with a smooth diagonal slope from high-front to low-back (mirror of wedge solid). No inverted stair type exists.
 Corner wedge — square pyramid. Full square base, no top face. Apex at the local NW top corner. North and west faces are right triangles (vertical right-angle edges meeting at the apex). South and east faces are long diagonal slopes. Directional N/E/S/W — apex corner rotates with direction.
 Corner wedge inverted — same as corner wedge, flipped vertically. Apex at the local NW bottom corner. Full square top face, no base. Right-angle faces on north and west. Directional N/E/S/W.
-Cube doorway — cube geometry with a decorative doorway arch outline (~70% of face) drawn flat on the local south face. Directional N/E/S/W — marked face rotates with direction.
+Cube doorway — cube geometry with a decorative doorway outline drawn flat on the local south face: three edges only (left, right, top — ~70% of face width, full face height). No bottom edge — the doorway extends to the base of the face. Directional N/E/S/W — marked face rotates with direction.
 Cube window — cube geometry with a decorative rectangle outline (~70% of face) drawn flat on the local south face. Directional N/E/S/W — marked face rotates with direction.
 
 All types except Cube are directional (N/E/S/W). Rotate with Q/E before placing. HUD shows current direction only when a directional type is selected.
@@ -95,11 +95,12 @@ In Select mode, click cells on the same Y level to mark polygon vertices. Press 
 ## Stamps
 <!-- Steps: 5+ -->
 
-A stamp is a saved multi-cell structure: a named snapshot of a selection's cells (cubes, stairs, wedges), normalised to origin.
+A stamp is a saved multi-cell structure: a named snapshot of a selection's cells (types, directions, colours), normalised to origin using the minimum bounding box corner (lowest x, y, z) as anchor.
 
-Saving: select objects → Save selection as stamp button → name prompt → written to Supabase stamps table.
-Placing: click stamp in sidebar → ghost follows cursor → R rotates 90° → T cycles anchor corner through the stamp's footprint corners → click to place. Ghost turns red when any target cell is occupied; click does nothing. ESC cancels.
-Stamps are global across projects.
+Saving: select objects → Save selection button → name prompt → written to Supabase stamps table. Name must be unique — if name already exists, show overwrite confirmation (danger modal).
+Placing: click stamp in sidebar → ghost follows cursor → Q/E rotates 90° → T cycles anchor corner through the stamp's footprint corners → click to place. Ghost turns red when any target cell is occupied; click does nothing. ESC cancels.
+Deleting: delete button on each stamp row → danger modal confirmation → removed from Supabase.
+Stamps are global (shared across all projects and users).
 
 ---
 
