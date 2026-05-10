@@ -65,7 +65,7 @@
     state.building = (data.building && data.building.length > 0) ? data.building : [{ bx: 0, bz: 0 }];
     state.cells    = new Map();
     (data.cells || []).forEach(({ x, y, z, object, direction, colorId }) => {
-      if (!['cube', 'stair-solid', 'wedge-solid', 'wedge-solid-inverted'].includes(object)) return;
+      if (!['cube', 'stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window'].includes(object)) return;
       state.cells.set(`${x},${y},${z}`, { object, direction, colorId });
     });
     state.colors  = data.colors || DEFAULT_COLOURS.map(c => ({ ...c }));
@@ -150,7 +150,7 @@
     const key = `${x},${y},${z}`;
     if (state.cells.has(key)) return false;
     if (!_inFootprint(x, z)) return false;
-    const isIncline = ['stair-solid', 'wedge-solid', 'wedge-solid-inverted'].includes(state.selectedObject);
+    const isIncline = ['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window'].includes(state.selectedObject);
     state.cells.set(key, {
       object:    state.selectedObject,
       direction: isIncline ? state.placeDirection : null,

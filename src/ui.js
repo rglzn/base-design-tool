@@ -414,7 +414,7 @@
     });
   }
 
-  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted']);
+  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window']);
 
   function _updateDirectionHud() {
     const hud  = document.getElementById('hud-direction');

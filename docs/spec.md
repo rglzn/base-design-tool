@@ -57,14 +57,18 @@ Top bar: logo left · Save Project + Load Project right. Nothing else.
 ## Object Types
 <!-- Steps: 3+ -->
 
-Four types. All occupy a full 1×1×1 cell. No edge objects.
+Eight types. All occupy a full 1×1×1 cell. No edge objects.
 
 Cube — solid block, no direction.
 Stair solid — filled block with an 8-step staircase profile.
 Wedge solid — filled block with a smooth diagonal slope from low-front to high-back.
 Wedge solid inverted — filled block with a smooth diagonal slope from high-front to low-back (mirror of wedge solid). No inverted stair type exists.
+Corner wedge — square pyramid. Full square base, no top face. Apex at the local NW top corner. North and west faces are right triangles (vertical right-angle edges meeting at the apex). South and east faces are long diagonal slopes. Directional N/E/S/W — apex corner rotates with direction.
+Corner wedge inverted — same as corner wedge, flipped vertically. Apex at the local NW bottom corner. Full square top face, no base. Right-angle faces on north and west. Directional N/E/S/W.
+Cube doorway — cube geometry with a decorative doorway arch outline (~70% of face) drawn flat on the local south face. Directional N/E/S/W — marked face rotates with direction.
+Cube window — cube geometry with a decorative rectangle outline (~70% of face) drawn flat on the local south face. Directional N/E/S/W — marked face rotates with direction.
 
-Inclines (stair solid, wedge solid, wedge solid inverted) have a direction (N/E/S/W) — the direction the slope rises toward. Rotate with Q/E before placing. HUD shows current direction only when an incline is selected.
+All types except Cube are directional (N/E/S/W). Rotate with Q/E before placing. HUD shows current direction only when a directional type is selected.
 
 No SVG thumbnails. Object buttons show text labels only.
 

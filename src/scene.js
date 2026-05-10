@@ -11,7 +11,7 @@
   let _hoverHit = null;
   let _mgOrigin = null;  // { x, z } integer grid cell under cursor for multi-ghost
 
-  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted']);
+  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window']);
   const _DIR_ROT = { N: 0, E: -Math.PI / 2, S: Math.PI, W: Math.PI / 2 };
   const _keys = new Set();
 
@@ -265,6 +265,59 @@
       }
     }
 
+    if (type === 'corner-wedge') {
+      // Square pyramid. Base at y=-0.5, apex at local NW top corner (-0.5, +0.5, -0.5).
+      // For direction N: NW = (-x, +y, -z). Apex corner rotates with _DIR_ROT.
+      // Faces: base (bottom quad), south slope, east slope, north tri, west tri.
+      const apex = [-0.5, 0.5, -0.5];
+      // Base (y = -0.5), normal down
+      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5,-0.5, 0.5],[-0.5,-0.5, 0.5]);
+      // South face (z = +0.5 edge → apex): diagonal slope
+      t([-0.5,-0.5, 0.5], [ 0.5,-0.5, 0.5], apex);
+      // East face (x = +0.5 edge → apex): diagonal slope
+      t([ 0.5,-0.5,-0.5], apex, [ 0.5,-0.5, 0.5]);
+      // North face (z = -0.5 edge): right-angle vertical triangle
+      t([-0.5,-0.5,-0.5], apex, [ 0.5,-0.5,-0.5]);
+      // West face (x = -0.5 edge): right-angle vertical triangle
+      t([-0.5,-0.5, 0.5], apex, [-0.5,-0.5,-0.5]);
+    }
+
+    if (type === 'corner-wedge-inverted') {
+      // Corner wedge flipped vertically. Full top face, apex at local NW bottom corner (-0.5, -0.5, -0.5).
+      const apex = [-0.5, -0.5, -0.5];
+      // Top face (y = +0.5), normal up
+      q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]);
+      // South face (z = +0.5 edge → apex): diagonal slope
+      t([ 0.5, 0.5, 0.5], [-0.5, 0.5, 0.5], apex);
+      // East face (x = +0.5 edge → apex): diagonal slope
+      t([ 0.5, 0.5, 0.5], apex, [ 0.5, 0.5,-0.5]);
+      // North face (z = -0.5 edge): right-angle vertical triangle
+      t([ 0.5, 0.5,-0.5], apex, [-0.5, 0.5,-0.5]);
+      // West face (x = -0.5 edge): right-angle vertical triangle
+      t([-0.5, 0.5,-0.5], apex, [-0.5, 0.5, 0.5]);
+    }
+
+    if (type === 'cube-doorway') {
+      // Full cube geometry (same as BoxGeometry but manual, so EdgesGeometry works uniformly).
+      // Decorative arch outline added as extra line geometry separately in _rebuildInclines.
+      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // back
+      q([-0.5,-0.5, 0.5],[-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5,-0.5, 0.5]); // front
+      q([-0.5,-0.5,-0.5],[-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5,-0.5,-0.5]); // bottom
+      q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]); // top
+      q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[-0.5, 0.5, 0.5],[-0.5,-0.5, 0.5]); // left
+      q([ 0.5,-0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]); // right
+    }
+
+    if (type === 'cube-window') {
+      // Same full cube geometry as cube-doorway.
+      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // back
+      q([-0.5,-0.5, 0.5],[-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5,-0.5, 0.5]); // front
+      q([-0.5,-0.5,-0.5],[-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5,-0.5,-0.5]); // bottom
+      q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]); // top
+      q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[-0.5, 0.5, 0.5],[-0.5,-0.5, 0.5]); // left
+      q([ 0.5,-0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]); // right
+    }
+
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.computeVertexNormals();
@@ -293,8 +346,53 @@
       mesh.userData.key       = key;
       mesh.userData.isIncline = true;
       mesh.add(new THREE.LineSegments(_incEdgeGeos[cell.object], selected ? _selEdgeMat : _edgeMat));
+      if (cell.object === 'cube-doorway' || cell.object === 'cube-window') {
+        _addDecalLines(mesh, cell.object, cell.direction, mat);
+      }
       _inclineGroup.add(mesh);
     });
+  }
+
+  // ── Decal lines — doorway arch / window rect on local south face (z=+0.5) ──
+  // Attached as a child of the mesh; mesh rotation already handles direction.
+  function _addDecalLines(mesh, type) {
+    const pts = [];
+    const z   =  0.501; // just in front of the south face to avoid z-fighting
+    const hw  =  0.35;  // half-width  (~70% of face)
+    const bot = -0.5;   // bottom of cell
+
+    if (type === 'cube-doorway') {
+      // Two vertical legs + semicircular arch.
+      const legTop = bot + 0.455; // spring line at ~70% height
+      pts.push(-hw, bot, z,  -hw, legTop, z);
+      pts.push( hw, bot, z,   hw, legTop, z);
+      const archR  = hw;
+      const archCY = legTop;
+      const segs   = 16;
+      for (let i = 0; i < segs; i++) {
+        const a0 = Math.PI + (i / segs) * Math.PI;
+        const a1 = Math.PI + ((i + 1) / segs) * Math.PI;
+        pts.push(
+          archR * Math.cos(a0), archCY + archR * Math.sin(a0), z,
+          archR * Math.cos(a1), archCY + archR * Math.sin(a1), z
+        );
+      }
+    }
+
+    if (type === 'cube-window') {
+      // Rectangle outline centred on the south face.
+      const y0 = -0.175;
+      const y1 =  0.35;
+      pts.push(-hw, y0, z,   hw, y0, z);
+      pts.push( hw, y0, z,   hw, y1, z);
+      pts.push( hw, y1, z,  -hw, y1, z);
+      pts.push(-hw, y1, z,  -hw, y0, z);
+    }
+
+    if (!pts.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    mesh.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x000000 })));
   }
 
   // ── Raycasting ─────────────────────────────────────────────────
@@ -371,6 +469,9 @@
           } else if (_INCLINE_TYPES.has(cell.object)) {
             mesh = new THREE.Mesh(_incGeos[cell.object], mat);
             mesh.rotation.y = _DIR_ROT[cell.direction] ?? 0;
+            if (cell.object === 'cube-doorway' || cell.object === 'cube-window') {
+              _addDecalLines(mesh, cell.object, cell.direction, mat);
+            }
           } else {
             return;
           }
@@ -403,6 +504,9 @@
     } else if (_INCLINE_TYPES.has(obj)) {
       mesh = new THREE.Mesh(_incGeos[obj], mat);
       mesh.rotation.y = _DIR_ROT[App.state.placeDirection] ?? 0;
+      if (obj === 'cube-doorway' || obj === 'cube-window') {
+        _addDecalLines(mesh, obj, App.state.placeDirection, mat);
+      }
     } else {
       return;
     }

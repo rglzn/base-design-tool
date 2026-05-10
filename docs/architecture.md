@@ -29,15 +29,18 @@ Single user, no auth, Supabase persistence, Cloudflare Pages hosting.
 - **Step 5h** — Selection actions bar: persistent bar in sidebar showing whenever ≥1 pieces are selected (regardless of active tool). Four buttons: Duplicate, Pick Up, Paint (bulk repaint to active swatch), Delete. Bar hidden when selection is empty.
 - **Step 5i** — Confirmation modal for large selections: Delete and Paint (bulk) actions affecting >10 pieces show a confirmation modal before proceeding. ≤10 pieces proceed immediately.
 
+- **Step 6a** — Register four new object types in app.js + ui.js: corner-wedge, corner-wedge-inverted, cube-doorway, cube-window. Added to state valid types, direction handling (all four directional N/E/S/W), and Objects sidebar (text labels, eight types total).
+- **Step 6b** — Geometry for all four new types in scene.js: corner-wedge, corner-wedge-inverted, cube-doorway, cube-window.
+
 ### To Do
 <!-- Step sizing rule: each step should touch ≤3 files and <=5 fixes/features and be completable in one focused session. If a planned step touches more, split it before greenlighting. Prefer narrow correctness over broad ambition. -->
-- **Next session** — Discuss with Architect: add 4 new shapes — corner wedge, inverted corner wedge, cube with window face, cube with doorway face. Design geometry, rotation states, and sidebar integration before any Dev work. Discuss save functionality: multiple saves cannot have the same name, ask for overwrite confirmation to user
-- **Step 6** — Stamps: creation: select region, name it, save to Supabase. (app.js, ui.js)
-- **Step 7** — Stamps: placement: ghost preview, Q/E rotation, T anchor-corner cycling, red-if-blocked. Reuses multi-ghost infrastructure from 5d. (scene.js, ui.js, app.js)
-- **Step 8** — Perimeter selection (F key).
-- **Step 9** — X-ray toggle.
-- **Step 10** — Clear all (destructive modal).
-- **Step 11** — Hotkey strip rework: fully dynamic display based on active tool and selected object type. Resolves all known info-bar conflicts.
+- **Step 6b.1** — Bug fix (scene.js): side-face placement on inverted corner wedge places ghost/object on opposite face. Incorrect buildTarget cell offset due to unexpected face normal direction on sloped geometry. (scene.js)
+- **Step 7** — Stamps: creation: select region, name it, save to Supabase. (app.js, ui.js)
+- **Step 8** — Stamps: placement: ghost preview, Q/E rotation, T anchor-corner cycling, red-if-blocked. Reuses multi-ghost infrastructure from 5d. (scene.js, ui.js, app.js)
+- **Step 9** — Perimeter selection (F key).
+- **Step 10** — X-ray toggle.
+- **Step 11** — Clear all (destructive modal).
+- **Step 12** — Hotkey strip rework: fully dynamic display based on active tool and selected object type. Resolves all known info-bar conflicts.
 
 ---
 
@@ -80,7 +83,7 @@ Editor-only (not persisted): `tool`, `selectedObject`, `placeDirection`, `select
 
 **building** — array of footprint landclaims. Each landclaim is 10×10 world units. Max 6 landclaims, must stay connected.
 
-**cells** — sparse Map keyed by "x,y,z". Each entry: object type, direction, colorId. Object is one of: cube, stair-solid, wedge-solid, wedge-solid-inverted. Direction is N/E/S/W for inclines, null for cubes.
+**cells** — sparse Map keyed by "x,y,z". Each entry: object type, direction, colorId. Object is one of: cube, stair-solid, wedge-solid, wedge-solid-inverted, corner-wedge, corner-wedge-inverted, cube-doorway, cube-window. Direction is N/E/S/W for all types except cube, which is null.
 
 **colors** — array of unnamed hex swatches. Index 0 is the default colour, never deletable.
 
@@ -119,4 +122,4 @@ Never hardcode colours. Full values in spec.md § CSS.
 ## Current State
 <!-- Keep ≤5 sentences: (a) last completed step, (b) what is broken and why, (c) what current step must accomplish. -->
 
-Steps 5a through 5i complete. All selection tools, multi-ghost, paint tool, selection actions bar, confirmation modal, settings modal, and UI scale done. Next session: discuss corner wedge, inverted corner wedge, cube with window, cube with doorway shapes with Architect before any Dev work, discuss save functionality: multiple saves cannot have the same name, ask for overwrite confirmation to user, then proceed to Step 6 (Stamps).
+Steps 6a and 6b complete. All eight object types registered and rendering. Known bug: side-face placement on corner-wedge-inverted places object on opposite face — fix in Step 6b.1 (scene.js, buildTarget logic).
