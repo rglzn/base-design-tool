@@ -4,65 +4,50 @@
 Browser-based 3D voxel base planner for Dune Awakening guild bases.
 Single user, no auth, Supabase persistence, Cloudflare Pages hosting.
 
+This project has two active versions:
+- **v1** — cubic integer voxel grid, live on `main`. Finishing remaining steps now.
+- **v2** — full graph model supporting square-triangle hybrid tiling, planned on `v2` branch. See `spec-v2.md` for design detail.
+
+---
+
+# V1
+
 **Tools:** Build, Delete, Select, Area Select [shift+click/drag adds/removes], Paint [bulk repaint via sidebar], Duplicate, Pick Up [multi-ghost with Q/E rotate, Z/X level shift, T anchor cycle]
 
-**Objects:** Cube, Stair, Wedge, Wedge Inverted, Corner Wedge, Corner Wedge Inverted, Doorway, Window, Pentashield Side, Pentashield Top
+**Objects:** Cube, Stair, Wedge, Wedge Inverted, Corner Wedge, Corner Wedge Inverted, Doorway, Window, Pentashield Side, Pentashield Top, ½ Wedge, ½ Wedge + Block, ½ Wedge Inverted, ½ Wedge + Block Inverted
 
 **Features:** Save/Load projects [Supabase], Stamps [save selection, place via ghost], welcome splash [load or new project], inline footprint editor [up to 6 connected 10×10 landclaims], camera [left-drag pan, right-drag rotate, scroll zoom, WASD pan], Settings modal [pan/rotate/zoom/UI scale sliders], X-ray toggle, placement ghost, N/S/E/W 2D compass, shortcuts strip, selection actions bar [duplicate/pick up/paint/delete, confirmation modal >10 pieces]
 
----
-
-## Status
+## V1 Status
 
 ### Done
-- Architecture agreed. Repo, Cloudflare Pages, Supabase all live.
-- v1 preserved in git history. v2 build not yet started.
-- **Step 1** — v2 core: footprint editor, 3D scene, cube placement, Build/Delete/Select tools, colour swatches. End-to-end usable.
-- **Step 2** — Supabase: autosave, Save/Load Project, first-run modal.
-- **Step 3** — Simplify + rework startup flow. Remove walls, floors, thin inclines. Solid objects only (cube, stair-solid, wedge-solid, wedge-solid-inverted). Inline footprint builder replaces modal. Load-or-new startup screen replaces first-run modal. Face-only raycasting.
-- **Step 3.1** — Bug fixes and polish: load-or-new on every F5; Select tool with yellow highlight; left-drag pan / right-drag rotate / WASD pan; placement ghost (showPlacementGhost toggle); wedge-solid-inverted type + geometry + SVG; corrected stair/wedge SVGs; shortcuts strip; X-ray moved to View sidebar section; N/S/E/W 2D compass; landclaim boundary grid lines.
-- **Step 4** — Full object sidebar: all four types, SVG thumbnails, Q/E HUD. Fixed duplicate polygon in wedge-solid-inverted icon.
-- **Step 5a** — Bug fixes (scene.js): z-fighting edge lines, inverted wedge geometry (vertically flipped), 8-step stair geometry.
-- **Step 5b** — Bug fixes (ui.js + scene.js): stale render on hotkey rotation, W/S camera swap, remap R=Select/T=Delete, shortcuts strip update, red ghost suppression on placement, remove SVG sprite and switch object buttons to text-only.
-- **Step 5c** — Area Select tool: new tool in sidebar after Select (Build → Delete → Select → Area Select). Left-drag draws 2D rect overlay; on mouse-up selects all pieces whose cell falls within the rect including occluded pieces. Click without drag = single select. Shift+click/drag adds/removes. Shares selection state with Select tool.
-- **Step 5e** — Bug fixes + settings: (1) Area Select left-drag must not pan — only rect-select; (2) right-click must not deselect when objects are selected; (3) kill autosave entirely — save only on explicit Save Project click; (4) Settings modal (top bar, next to Save Project): three sliders — Pan speed (left-drag + WASD), Rotate speed (right-drag), Zoom speed (scroll). (ui.js, scene.js, app.js)
-- **Step 5e.1** — Settings modal fixes: overflow/clipping fix; UI Scale slider (0.5–2.0, default 1.0) scales sidebar, panels, text, compass, HUD, shortcuts strip — not the 3D viewport. Persists in localStorage.
-- **Step 5d** — Multi-ghost: Duplicate and Pick Up actions in sidebar. Ghost follows cursor, Q/E rotates 90°, T cycles anchor corner through 4 footprint corners, Z/X shifts ghost up/down one level. Occupied cells silently skipped on placement; ghost red only when every target cell is occupied. On placement, placed pieces become active selection. ESC cancels; Pick Up restores originals on ESC.
-- **Step 5f** — Multi-ghost fixes: Z/X level shifting, skip occupied on placement, post-placement selection.
-- **Step 5g** — Paint tool: new tool in sidebar after Area Select (Build → Delete → Select → Area Select → Paint). Click any placed piece to repaint it to the active colour swatch. With ≥1 pieces selected, a Paint button in the sidebar repaints the whole selection to the active colour. (app.js, ui.js, scene.js)
-- **Step 5g.1** — Paint tool selection fix: switching to Paint tool preserves current selection so sidebar Paint button can immediately repaint it.
-
-- **Step 5h** — Selection actions bar: persistent bar in sidebar showing whenever ≥1 pieces are selected (regardless of active tool). Four buttons: Duplicate, Pick Up, Paint (bulk repaint to active swatch), Delete. Bar hidden when selection is empty.
-- **Step 5i** — Confirmation modal for large selections: Delete and Paint (bulk) actions affecting >10 pieces show a confirmation modal before proceeding. ≤10 pieces proceed immediately.
-
-- **Step 6a** — Register four new object types in app.js + ui.js: corner-wedge, corner-wedge-inverted, cube-doorway, cube-window. Added to state valid types, direction handling (all four directional N/E/S/W), and Objects sidebar (text labels, eight types total).
-- **Step 6b** — Geometry for all four new types in scene.js: corner-wedge, corner-wedge-inverted, cube-doorway, cube-window.
-
-- **Step 6b.1** — Bug fix (scene.js): winding order investigation, partial.
-- **Step 6b.2** — Bug fixes (scene.js): doorway decoration corrected to three-edge door frame; further winding investigation.
-- **Step 6b.3** — Bug fix (scene.js): all winding order issues resolved. cube-doorway and cube-window replaced with THREE.BoxGeometry. Three manual face flips on wedge-solid-inverted (right tri, slope, back) and one on corner-wedge-inverted (top). All eight types now fully correct.
-
 - **Step 7** — Stamps: creation and management. Save selection → name prompt → normalise to origin → Supabase. Stamp list in sidebar with Place (no-op) and Delete (danger modal). Name uniqueness check. style.css stamp row styles.
 - **Step 8** — Stamps: placement + 2-column grid UI. Ghost follows cursor, Q/E rotates, T cycles anchor corner, red-if-blocked, click to place. Clicking tile activates placement ghost. Delete × on tile corner with danger modal. Thumbnails removed. Reuses multi-ghost infrastructure from 5d.
+- **Step 12** — Hotkey strip rework: static strip with contextual greying. T→Y remap for anchor. Strip pills with .hotkey-inactive contextual greying. Three bug fixes: Q/E dead capture in scene.js, Space preventDefault, Ctrl guard for solo-key only. (ui.js, app.js, scene.js, index.html, style.css)
+- **Step 6d** — Save overwrite fix: duplicate name detection on save, destructive confirmation modal, update existing row instead of insert. (app.js, ui.js)
+- **Step 6d.1** — Four new directional object types: half-wedge, half-wedge-block, half-wedge-inverted, half-wedge-block-inverted. All N/E/S/W. (app.js, ui.js, scene.js)
 - **Step 6c** — Two new directional object types: `pentashield-side` and `pentashield-top`. Identical to `cube-window`/`cube-doorway` in all respects (BoxGeometry base, N/E/S/W rotation, sidebar registration). Decoration: 7 solid diagonal lines, centre line anchored bottom-left → top-right corner, 3 lines evenly spaced either side. `pentashield-side`: decoration on south face. `pentashield-top`: decoration on top face. Decoration lines visible on ghost for window, doorway, and both pentashields. (app.js, ui.js, scene.js)
 
 ### To Do
-- **Step 6d** — Save overwrite fix: when saving a project and the entered name matches any existing project (including the currently open one), show a destructive confirmation modal warning the existing save will be overwritten. On confirm, update that row rather than inserting a new one. (app.js, ui.js)
-
-- **Step 9** — Perimeter selection (F key).
+- **Step 14** — Two new object types + sidebar reorder. New types: `half-block-low` (full width, 0.5 height, y-offset 0) and `half-block-high` (full width, 0.5 height, y-offset 0.5). No direction, null like cube. Sidebar reordered to: Cube / Triangle [WIP], Half Block Low / Half Block High, Corner Block [WIP] / Stair, Wedge / Wedge Inv, Corner Wedge / Corner Wedge Inv, Doorway / Window, Pentashield Side / Pentashield Top, ½ Wedge / ½ Wedge + Block, ½ Wedge Inv / ½ Wedge + Block Inv. WIP buttons (Triangle [WIP], Corner Block [WIP]) are non-interactive placeholders — no object type, disabled, label only. (app.js, ui.js, scene.js)
 - **Step 10** — X-ray toggle.
 - **Step 11** — Clear all (destructive modal).
-- **Step 12** — Hotkey strip rework: static strip with contextual greying. T→Y remap for anchor (multi-ghost + stamp placement). Strip pills: B=Build, T=Delete, R=Select, Q/E=Rotate, Y=Anchor, Z/X=Level, F=Fill, Del=Remove sel, WASD=Move, Space=Raise, Ctrl=Lower. JS toggles .hotkey-inactive class (reduced opacity) on each pill based on state: Q/E active when directional type selected; Y/Z/X active during multi-ghost or stamp placement; Del/F active in Select/Area Select with selection; all others always active. Three bug fixes: Q/E dead capture in scene.js, Space preventDefault, Ctrl guard for solo-key only. (ui.js, app.js, scene.js, index.html, style.css)
-- **Step 13** — Stair side face lines: currently drawn as 8 per-step quads per side, producing visible step lines on the triangular side faces. Cosmetic only — replace with single triangle per side. Needs careful handling to avoid breaking EdgesGeometry or raycasting.
+
+## V1 Current State
+<!-- Keep ≤5 sentences: (a) last completed step, (b) anything known to be broken, (c) what the next step must accomplish. -->
+
+Steps 6a–6d and Step 12 complete. All fourteen object types, hotkey strip, and save overwrite fix working. Step 14 (new objects + sidebar reorder) in progress. Step 10 (X-ray toggle) is next after that.
 
 ---
+
+# Shared
 
 ## Project
 
 - **Stack:** Vanilla HTML/CSS/JS. No framework, no build step. Three.js r128 via cdnjs. Rajdhani + Share Tech Mono via Google Fonts.
 - **Hosting:** Cloudflare Pages from `src/`. URL: https://base-design-tool.pages.dev/
 - **Storage:** Supabase project `base-design`. URL: https://ekrlymbgjduczogvskox.supabase.co
-- **Repo:** GitHub-connected.
+- **Repo:** GitHub-connected. Branches: `main` (v1 live), `dev` (v1 in progress), `v2` (v2 in progress).
 
 ---
 
@@ -74,9 +59,10 @@ base_planner/
 │   ├── architecture.md   ← this file, always read first
 │   ├── architect.md      ← Architect role rules (this Desktop chat)
 │   ├── dev.md            ← Dev role rules (fresh Desktop chat per step)
-│   ├── spec.md           ← deep reference, read sections as needed
-│   ├── v1-reference.png  ← visual reference for v2
-│   └── v1-reference.html ← html reference for v2
+│   ├── spec.md           ← v1 deep reference
+│   ├── spec-v2.md        ← v2 deep reference
+│   ├── v1-reference.png  ← visual reference
+│   └── v1-reference.html ← html reference
 └── src/
     ├── index.html        ← shell, CDN tags
     ├── style.css         ← all styles
@@ -85,7 +71,7 @@ base_planner/
     └── ui.js             ← sidebar, modals, footprint editor, hotkeys
 ```
 
-`app.js` exposes `window.App`, `scene.js` exposes `window.Scene`, `ui.js` exposes `window.UI`. State lives in `App` only — all mutations go through `App` methods so autosave hooks centrally.
+v1 and v2 share the same `src/` files on different branches. `app.js` exposes `window.App`, `scene.js` exposes `window.Scene`, `ui.js` exposes `window.UI`. State lives in `App` only — all mutations go through `App` methods so autosave hooks centrally.
 
 ---
 
@@ -96,7 +82,7 @@ Editor-only (not persisted): `tool`, `selectedObject`, `placeDirection`, `select
 
 **building** — array of footprint landclaims. Each landclaim is 10×10 world units. Max 6 landclaims, must stay connected.
 
-**cells** — sparse Map keyed by "x,y,z". Each entry: object type, direction, colorId. Object is one of: cube, stair-solid, wedge-solid, wedge-solid-inverted, corner-wedge, corner-wedge-inverted, cube-doorway, cube-window, pentashield-side, pentashield-top. Direction is N/E/S/W for all types except cube, which is null.
+**cells** — sparse Map keyed by "x,y,z". Each entry: object type, direction, colorId. Object is one of: cube, stair-solid, wedge-solid, wedge-solid-inverted, corner-wedge, corner-wedge-inverted, cube-doorway, cube-window, pentashield-side, pentashield-top, half-wedge, half-wedge-block, half-wedge-inverted, half-wedge-block-inverted. Direction is N/E/S/W for all types except cube, which is null.
 
 **colors** — array of unnamed hex swatches. Index 0 is the default colour, never deletable.
 
@@ -132,14 +118,45 @@ Never hardcode colours. Full values in spec.md § CSS.
 
 ---
 
-## Current State
-<!-- Keep ≤5 sentences: (a) last completed step, (b) what is broken and why, (c) what current step must accomplish. -->
+## V1 Future Ideas
+<!-- Parked v1 concepts. -->
 
-Steps 6a–6c complete. All ten object types working including pentashield-side and pentashield-top with 7-line diagonal decoration. Ghost decoration visible for window, doorway, and pentashields. Ready for Step 6d (save overwrite fix).
+- **Perimeter selection** (F key) — parked from Step 9.
+- **Stair side face lines** — currently 8 per-step quads per side produce visible step lines on triangular side faces. Cosmetic fix: replace with single triangle per side. Needs care around EdgesGeometry and raycasting.
 
 ---
 
-## Future Ideas
-<!-- Parked concepts that would require significant architectural change or are out of scope for now. -->
+# V2
 
-- **Triangular objects** — equilateral triangles that attach to existing object faces and create half-unit offsets, with other objects inheriting those offsets. Would break the cubic voxel grid (integer x,y,z keys), raycasting, placement, stamps, and footprint systems. Requires a parallel coordinate system or adjacency graph. Significant partial rebuild — revisit if the tool evolves beyond rectangular base planning.
+Full graph model replacing the cubic integer voxel grid. The game uses a square-triangle hybrid tiling system (Archimedean-style); entire base wings are built in rotated frames using dodecagonal modules. v2 models this accurately. See `spec-v2.md` for full design detail.
+
+## V2 Decisions
+
+- **Coordinate system:** float world position + integer rotation index (0–11). Connectivity graph is source of truth; positions recomputed from graph as needed.
+- **Collision:** two pieces collide if their footprint polygons intersect with area > 0.001.
+- **Branch:** `v2` off `main`. v1 stays live on `main` throughout.
+- **Triangle type:** one only — equilateral, no variants. Must connect to an existing piece face; cannot be placed on empty footprint.
+- **Connection rule:** any piece face can connect to any other piece face, flush and non-overlapping. A single piece may bridge two non-parallel faces simultaneously.
+
+## V2 Status
+
+### Done
+—
+
+### To Do
+- **V2 Step 1** — Geometry primitives & rotation algebra. Define the 12-rotation set, square and triangle face descriptors, and the attachment transform function. Pure maths, no UI. (new file: geometry.js)
+- **V2 Step 2** — State shape: pieces and connections. Replace cells Map with pieces Map and connection graph. Serialise/deserialise. Core App methods: placePiece, deletePiece, getPiece. UI will be broken at this point — that is expected.
+- **V2 Step 3** — Render pieces from new state. Walk pieces map, build mesh per piece at its world transform. Replace _rebuildCubes/_rebuildInclines with _rebuildPieces. Squares only at this stage.
+- **V2 Step 4** — Raycast + placement (squares only, axis-aligned). Pick a face, attach a new square. Prove the model can grow.
+- **V2 Step 5** — Triangles + rotation cycling. Add triangle as placeable shape. Q/E cycles valid rotations for current attachment face.
+- **V2 Step 6** — Delete a piece. Orphaned connected pieces stay; connections to deleted piece are nulled.
+- **V2 Step 7** — Select + single-piece operations (paint). Selection becomes Set<pieceId>.
+- **V2 Step 8** — Duplicate / pick-up: ghost as connected subgraph with root face. Rotation cycles root face and attachment rotation.
+- **V2 Step 9** — Stamps as saved subgraphs. Reuses Step 8 ghost infrastructure.
+- **V2 Step 10** — Footprint test in world space. Polygon-in-landclaim test for squares and triangles.
+- **V2 Step 11** — Direction HUD rework. N/E/S/W replaced with 12-rotation indicator.
+- **V2 Step 12** — Save/load, project CRUD. Serialisation format update only; CRUD logic unchanged.
+
+## V2 Current State
+
+Not started. V1 must reach feature parity first.

@@ -65,7 +65,7 @@
     state.building = (data.building && data.building.length > 0) ? data.building : [{ bx: 0, bz: 0 }];
     state.cells    = new Map();
     (data.cells || []).forEach(({ x, y, z, object, direction, colorId }) => {
-      if (!['cube', 'stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top'].includes(object)) return;
+      if (!['cube', 'stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top', 'half-wedge', 'half-wedge-block', 'half-wedge-inverted', 'half-wedge-block-inverted'].includes(object)) return;
       state.cells.set(`${x},${y},${z}`, { object, direction, colorId });
     });
     state.colors  = data.colors || DEFAULT_COLOURS.map(c => ({ ...c }));
@@ -150,7 +150,7 @@
     const key = `${x},${y},${z}`;
     if (state.cells.has(key)) return false;
     if (!_inFootprint(x, z)) return false;
-    const isIncline = ['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top'].includes(state.selectedObject);
+    const isIncline = ['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top', 'half-wedge', 'half-wedge-block', 'half-wedge-inverted', 'half-wedge-block-inverted'].includes(state.selectedObject);
     state.cells.set(key, {
       object:    state.selectedObject,
       direction: isIncline ? state.placeDirection : null,
@@ -334,6 +334,26 @@
     }
   }
 
+  async function saveProjectOverwrite(id, name) {
+    try {
+      const thumbnail = window.Scene ? window.Scene.getSnapshot() : null;
+      const { data, error } = await window._sb
+        .from('projects')
+        .update({ name, is_named: true, data: _serialize(), thumbnail })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      state.project = { id: data.id, name: data.name, isNamed: true };
+      await window._sb
+        .from('app_state')
+        .upsert({ key: 'active_project_id', value: data.id });
+      if (window.UI) window.UI.refresh();
+    } catch (err) {
+      window.UI.showError('Failed to save: ' + err.message);
+    }
+  }
+
   async function fetchNamedProjects() {
     const { data, error } = await window._sb
       .from('projects')
@@ -487,10 +507,17 @@
     const corners = [[rxMin, rzMin], [rxMax, rzMin], [rxMax, rzMax], [rxMin, rzMax]];
     const [anchorDX, anchorDZ] = corners[anchorIdx];
 
-    return rotated.map(c => ({
-      key:  `${originX + c.rdx - anchorDX},${c.dy},${originZ + c.rdz - anchorDZ}`,
-      cell: { object: c.object, direction: c.direction, colorId: c.colorId },
-    }));
+    const _DIR_CW = { N: 'W', W: 'S', S: 'E', E: 'N' };
+    return rotated.map(c => {
+      let dir = c.direction;
+      if (dir) {
+        for (let r = 0; r < rotation; r++) dir = _DIR_CW[dir];
+      }
+      return {
+        key:  `${originX + c.rdx - anchorDX},${c.dy},${originZ + c.rdz - anchorDZ}`,
+        cell: { object: c.object, direction: dir, colorId: c.colorId },
+      };
+    });
   }
 
   function multiGhostValid(originX, originZ) {
@@ -664,7 +691,7 @@
     rotateMultiGhost, cycleMultiGhostAnchor, shiftMultiGhostLevel, multiGhostValid, getMultiGhostTargets,
     addBlock, removeBlock, blockHasContent, canRemoveBlock, footprintLabel,
     loadActiveProject, loadProject, createFirstProject,
-    saveProject, fetchNamedProjects, deleteProject, isCurrentProjectNamed,
+    saveProject, saveProjectOverwrite, fetchNamedProjects, deleteProject, isCurrentProjectNamed,
     loadStamps, saveStamp, deleteStamp, getStampByName, activateStampPlacement,
     getSettings, saveSettings,
     init,

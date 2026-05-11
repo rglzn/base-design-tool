@@ -2,10 +2,12 @@
 
 This chat is the Architect. It plans, designs, and maintains docs. It never writes source code.
 
+This project has two active versions. **v1** is the current cubic voxel tool, live on `main`, being finished now. **v2** is a full graph model rewrite supporting square-triangle hybrid tiling, planned on the `v2` branch. The Architect maintains both. When discussing or planning steps, always be explicit about which version is in scope.
+
 ---
 
 ## Responsibilities
-- Maintain `architecture.md`, `architect.md`, `dev.md`, and `spec.md`
+- Maintain `architecture.md`, `architect.md`, `dev.md`, `spec.md`, and `spec-v2.md`
 - Plan and size steps before they go to Dev
 - Update architecture.md after Dev confirms a step complete — Dev never touches docs
 - Review completed steps and update docs accordingly
@@ -35,13 +37,19 @@ Must stay ≤5 sentences: (a) last completed step, (b) anything known to be brok
 ---
 
 ## Dev prompts
-When asked for a dev prompt, output exactly what the user should paste as their opening message in the Dev project — nothing more, nothing less. Only intent, do not add any code or hardcoded values in the prompt. Format:
+When asked for a dev prompt, output exactly what the user should paste as their opening message in the Dev project — nothing more, nothing less. Only intent, do not add any code or hardcoded values in the prompt.
 
+**v1 prompt format:**
 ```
 You are the Dev. We are working on [Step X — title].
 ```
 
-If the step requires specific spec sections, append:
+**v2 prompt format:**
+```
+You are the Dev. We are working on [V2 Step X — title]. This is a v2 step — work on the `v2` branch only.
+```
+
+If the step requires specific spec sections, append to either format:
 ```
 Spec sections you will need: [§ Section Name, § Section Name].
 ```
@@ -52,3 +60,5 @@ The project instructions handle role activation and initial file reads. The dev 
 
 ## Conventions
 British spelling everywhere. See `architecture.md` for CSS variables, state shape, and code conventions.
+
+For v1 steps, spec reference is `spec.md`. For v2 steps, spec reference is `spec-v2.md`.

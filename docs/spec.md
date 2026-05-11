@@ -159,7 +159,45 @@ The footprint editor and 3D viewport are both children of #viewport. Only one is
 
 ---
 
-## Three.js Render
+## Geometry Winding Order Reference
+<!-- Read this before writing any new _makeInclineGeo geometry. All faces must be CCW when viewed from outside (Three.js FrontSide convention). Wrong winding = inverted normals = ghost placement on opposite face. The empirical test: temporarily set material to FrontSide — any invisible face has wrong winding. -->
+
+The helper functions:
+- `q(a,b,c,d)` — emits △(a,b,c) + △(a,c,d). Vertices must be CCW from outside.
+- `t(a,b,c)` — emits △(a,b,c). Vertices must be CCW from outside.
+
+Correct winding per face orientation (viewed from outside):
+
+**Bottom face (y = constant, normal points −Y):**
+`q([L,y,B],[R,y,B],[R,y,F],[L,y,F])` — back-left → back-right → front-right → front-left
+
+**Top face (y = constant, normal points +Y):**
+`q([L,y,F],[R,y,F],[R,y,B],[L,y,B])` — front-left → front-right → back-right → back-left
+
+**Back face (z = −0.5, normal points −Z):**
+`q([L,T,z],[R,T,z],[R,B,z],[L,B,z])` — top-left → top-right → bottom-right → bottom-left
+
+**Front face (z = +0.5, normal points +Z):**
+`q([L,B,z],[R,B,z],[R,T,z],[L,T,z])` — bottom-left → bottom-right → top-right → top-left
+
+**Left face (x = −0.5, normal points −X):**
+`q([x,B,F],[x,T,F],[x,T,B],[x,B,B])` — bottom-front → top-front → top-back → bottom-back
+
+**Right face (x = +0.5, normal points +X):**
+`q([x,B,B],[x,T,B],[x,T,F],[x,B,F])` — bottom-back → top-back → top-front → bottom-front
+
+**Left triangle (x = −0.5, normal points −X):**
+`t([x,yA,zA],[x,yB,zB],[x,yC,zC])` — must be CCW from −X. Cross-check: (B−A)×(C−A) should point in −X direction.
+
+**Right triangle (x = +0.5, normal points +X):**
+`t([x,yA,zA],[x,yB,zB],[x,yC,zC])` — must be CCW from +X. Cross-check: (B−A)×(C−A) should point in +X direction.
+
+**Slope face (diagonal, normal points up-and-outward):**
+Start from the low-front edge, go across, then up to the high-back edge. For a slope rising toward −Z:
+`q([L,yLow,zFront],[R,yLow,zFront],[R,yHigh,zBack],[L,yHigh,zBack])`
+
+---
+
 <!-- Steps: 1+ -->
 
 Dirty-flag render loop — only re-render when state changes or camera moves. Instanced meshes per colour for cubes (threshold ~50). Edge lines via EdgesGeometry on all cell objects. All inclines use FrontSide material. Ground plane as line grid at y=0 across the footprint — minor grid lines every 1 unit, major grid lines every 10 units (landclaim boundaries) rendered slightly lighter than minor lines so each 10×10 landclaim is visually distinct. Camera: spherical orbit, left-drag pan, right-drag rotate/tilt, scroll zoom. WASD keys pan the camera.

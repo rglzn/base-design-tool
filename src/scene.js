@@ -12,7 +12,7 @@
   let _mgOrigin = null;  // { x, z } integer grid cell under cursor for multi-ghost
   let _ctrlModified = false;  // true when Ctrl is held alongside another modifier
 
-  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top']);
+  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top', 'half-wedge', 'half-wedge-block', 'half-wedge-inverted', 'half-wedge-block-inverted']);
   const _DIR_ROT = { N: 0, E: -Math.PI / 2, S: Math.PI, W: Math.PI / 2 };
   const _keys = new Set();
 
@@ -87,6 +87,7 @@
     _incEdgeGeos['cube-window']      = new THREE.EdgesGeometry(_boxGeo);
     _incEdgeGeos['pentashield-side'] = new THREE.EdgesGeometry(_boxGeo);
     _incEdgeGeos['pentashield-top']  = new THREE.EdgesGeometry(_boxGeo);
+    // half-wedge types use custom geometry from _makeInclineGeo — already built above in forEach
 
     document.addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -311,6 +312,56 @@
       t([-0.5, 0.5,-0.5], apex, [-0.5, 0.5, 0.5]);
     }
 
+    if (type === 'half-wedge') {
+      // Lower half of cell only (y: -0.5 → 0). High at back (-z, y=0), low front (+z, y=-0.5).
+      // Faces: base, back wall, left tri, right tri, slope. No top.
+      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5,-0.5, 0.5],[-0.5,-0.5, 0.5]); // base
+      q([-0.5,-0.5,-0.5],[-0.5, 0.0,-0.5],[ 0.5, 0.0,-0.5],[ 0.5,-0.5,-0.5]); // back wall
+      t([-0.5,-0.5, 0.5],[-0.5, 0.0,-0.5],[-0.5,-0.5,-0.5]);                   // left tri
+      t([ 0.5,-0.5,-0.5],[ 0.5, 0.0,-0.5],[ 0.5,-0.5, 0.5]);                   // right tri
+      q([-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5, 0.0,-0.5],[-0.5, 0.0,-0.5]); // slope
+    }
+
+    if (type === 'half-wedge-block') {
+      // Full cell. Lower half: cube (y: -0.5→0). Upper half: wedge (y: 0→+0.5), high at back (-z).
+      // Faces: base, back full, front half (lower cube face), left pentagon, right pentagon, slope.
+      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5,-0.5, 0.5],[-0.5,-0.5, 0.5]); // base
+      q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]); // back full
+      q([-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5, 0.0, 0.5],[-0.5, 0.0, 0.5]); // front half (cube portion)
+      // Left side: pentagon = lower rect + upper tri
+      q([-0.5,-0.5, 0.5],[-0.5, 0.0, 0.5],[-0.5, 0.0,-0.5],[-0.5,-0.5,-0.5]); // left lower rect
+      t([-0.5, 0.0, 0.5],[-0.5, 0.5,-0.5],[-0.5, 0.0,-0.5]);                   // left upper tri
+      // Right side: pentagon = lower rect + upper tri
+      q([ 0.5,-0.5,-0.5],[ 0.5, 0.0,-0.5],[ 0.5, 0.0, 0.5],[ 0.5,-0.5, 0.5]); // right lower rect
+      t([ 0.5, 0.0,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.0, 0.5]);                   // right upper tri
+      q([-0.5, 0.0, 0.5],[ 0.5, 0.0, 0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // slope
+    }
+
+    if (type === 'half-wedge-inverted') {
+      // Upper half of cell only (y: 0 → +0.5). Flat top, slope descends front (+z) to y=0.
+      // Faces: top, back wall, left tri, right tri, slope. No base.
+      q([-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // top
+      q([-0.5, 0.0,-0.5],[-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.0,-0.5]); // back wall
+      t([-0.5, 0.5,-0.5],[-0.5, 0.0,-0.5],[-0.5, 0.5, 0.5]);                   // left tri (CCW from -x)
+      t([ 0.5, 0.0,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5]);                   // right tri
+      q([-0.5, 0.0,-0.5],[ 0.5, 0.0,-0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]); // slope
+    }
+
+    if (type === 'half-wedge-block-inverted') {
+      // Full cell. Upper half: cube (y: 0→+0.5). Lower half: inverted wedge (y: -0.5→0), slope at front.
+      // Faces: top, back full, front half (upper cube face), left pentagon, right pentagon, slope.
+      q([-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // top
+      q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]); // back full
+      q([-0.5, 0.0, 0.5],[ 0.5, 0.0, 0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]); // front half (cube portion)
+      // Left side: pentagon = upper rect + lower tri
+      q([-0.5, 0.0,-0.5],[-0.5, 0.0, 0.5],[-0.5, 0.5, 0.5],[-0.5, 0.5,-0.5]); // left upper rect
+      t([-0.5,-0.5,-0.5],[-0.5, 0.0, 0.5],[-0.5, 0.0,-0.5]);                   // left lower tri
+      // Right side: pentagon = upper rect + lower tri
+      q([ 0.5, 0.0, 0.5],[ 0.5, 0.0,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5]); // right upper rect
+      t([ 0.5, 0.0,-0.5],[ 0.5, 0.0, 0.5],[ 0.5,-0.5,-0.5]);                   // right lower tri
+      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5, 0.0, 0.5],[-0.5, 0.0, 0.5]); // slope
+    }
+
     if (type === 'cube-doorway') {
       // Full cube geometry (same as BoxGeometry but manual, so EdgesGeometry works uniformly).
       // Decorative arch outline added as extra line geometry separately in _rebuildInclines.
@@ -364,6 +415,8 @@
           cell.object === 'pentashield-side' || cell.object === 'pentashield-top') {
         _addDecalLines(mesh, cell.object);
       }
+      // half-wedge types: mesh position is cell-centre but geometry occupies only half the cell height;
+      // no offset needed — geometry vertices already encode the correct y range.
       _inclineGroup.add(mesh);
     });
   }
@@ -542,6 +595,7 @@
                 cell.object === 'pentashield-side' || cell.object === 'pentashield-top') {
               _addDecalLines(mesh, cell.object);
             }
+            // half-wedge types need no decal lines
           } else {
             return;
           }
@@ -578,6 +632,7 @@
           obj === 'pentashield-side' || obj === 'pentashield-top') {
         _addDecalLines(mesh, obj);
       }
+      // half-wedge types need no decal lines
     } else {
       return;
     }

@@ -290,7 +290,24 @@
       btn.disabled    = true;
       btn.textContent = 'Saving…';
       _closeModal();
-      await App.saveProject(name);
+
+      let projects;
+      try {
+        projects = await App.fetchNamedProjects();
+      } catch (_) {
+        showError('Failed to save: could not check existing projects.');
+        return;
+      }
+
+      const match = projects.find(p => p.name.toLowerCase() === name.toLowerCase());
+      if (match) {
+        showDangerModal(
+          `A project named "${match.name}" already exists. Saving will overwrite it permanently.`,
+          async () => { await App.saveProjectOverwrite(match.id, name); }
+        );
+      } else {
+        await App.saveProject(name);
+      }
     });
 
     setTimeout(() => { input.focus(); input.select(); }, 60);
@@ -446,7 +463,7 @@
     });
   }
 
-  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top']);
+  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top', 'half-wedge', 'half-wedge-block', 'half-wedge-inverted', 'half-wedge-block-inverted']);
 
   function _updateDirectionHud() {
     const hud  = document.getElementById('hud-direction');
@@ -770,14 +787,7 @@
   // ── Top bar wiring ─────────────────────────────────────────────
   function _wireTopBar() {
     document.getElementById('btn-save-project').addEventListener('click', () => {
-      if (App.isCurrentProjectNamed()) {
-        showDangerModal(
-          `"${App.state.project.name}" is already a named save. Create a new save?`,
-          () => _showSaveProjectModal()
-        );
-      } else {
-        _showSaveProjectModal();
-      }
+      _showSaveProjectModal();
     });
 
     document.getElementById('btn-load-project').addEventListener('click', () => {
