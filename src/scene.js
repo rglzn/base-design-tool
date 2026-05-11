@@ -10,8 +10,9 @@
   let _dirty = false;
   let _hoverHit = null;
   let _mgOrigin = null;  // { x, z } integer grid cell under cursor for multi-ghost
+  let _ctrlModified = false;  // true when Ctrl is held alongside another modifier
 
-  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window']);
+  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top']);
   const _DIR_ROT = { N: 0, E: -Math.PI / 2, S: Math.PI, W: Math.PI / 2 };
   const _keys = new Set();
 
@@ -78,16 +79,24 @@
       _incEdgeGeos[type] = new THREE.EdgesGeometry(_incGeos[type]);
     });
     const _boxGeo = new THREE.BoxGeometry(1, 1, 1);
-    _incGeos['cube-doorway'] = _boxGeo;
-    _incGeos['cube-window']  = _boxGeo;
-    _incEdgeGeos['cube-doorway'] = new THREE.EdgesGeometry(_boxGeo);
-    _incEdgeGeos['cube-window']  = new THREE.EdgesGeometry(_boxGeo);
+    _incGeos['cube-doorway']      = _boxGeo;
+    _incGeos['cube-window']       = _boxGeo;
+    _incGeos['pentashield-side']  = _boxGeo;
+    _incGeos['pentashield-top']   = _boxGeo;
+    _incEdgeGeos['cube-doorway']     = new THREE.EdgesGeometry(_boxGeo);
+    _incEdgeGeos['cube-window']      = new THREE.EdgesGeometry(_boxGeo);
+    _incEdgeGeos['pentashield-side'] = new THREE.EdgesGeometry(_boxGeo);
+    _incEdgeGeos['pentashield-top']  = new THREE.EdgesGeometry(_boxGeo);
 
     document.addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      _keys.add(e.key.toLowerCase());
+      const k = e.key.toLowerCase();
+      if (k === 'q' || k === 'e') return;
+      if (k === ' ') e.preventDefault();
+      if (k === 'control') _ctrlModified = e.altKey || e.shiftKey || e.metaKey;
+      _keys.add(k);
     });
-    document.addEventListener('keyup', e => _keys.delete(e.key.toLowerCase()));
+    document.addEventListener('keyup', e => { _keys.delete(e.key.toLowerCase()); if (e.key === 'Control') _ctrlModified = false; });
 
     new ResizeObserver(_resize).observe(viewport);
     _resize();
@@ -126,7 +135,7 @@
 
     let dy = 0;
     if (_keys.has(' '))       dy += speed;
-    if (_keys.has('control')) dy -= speed;
+    if (_keys.has('control') && !_ctrlModified) dy -= speed;
 
     if (dx !== 0 || dz !== 0 || dy !== 0) {
       _controls.target.x += dx;
@@ -351,8 +360,9 @@
       mesh.userData.key       = key;
       mesh.userData.isIncline = true;
       mesh.add(new THREE.LineSegments(_incEdgeGeos[cell.object], selected ? _selEdgeMat : _edgeMat));
-      if (cell.object === 'cube-doorway' || cell.object === 'cube-window') {
-        _addDecalLines(mesh, cell.object, cell.direction, mat);
+      if (cell.object === 'cube-doorway' || cell.object === 'cube-window' ||
+          cell.object === 'pentashield-side' || cell.object === 'pentashield-top') {
+        _addDecalLines(mesh, cell.object);
       }
       _inclineGroup.add(mesh);
     });
@@ -395,6 +405,40 @@
       pts.push( hw2, y02, z,   hw2, y12, z);  // inner right
       pts.push( hw2, y12, z,  -hw2, y12, z);  // inner top
       pts.push(-hw2, y12, z,  -hw2, y02, z);  // inner left
+    }
+
+    if (type === 'pentashield-side') {
+      // 7 diagonal lines on the south face (z = +0.5).
+      // Line 4 (i=3) runs exactly corner-to-corner: (-0.5,-0.5) → (+0.5,+0.5).
+      // That means xBase = -0.5 (x = -0.5 + t at y = -0.5 + t, t in [0,1]).
+      // The 3 lines either side are spaced by gap = 1/3 in xBase.
+      const z = 0.501;
+      const N = 7;
+      const gap = 1 / 3;
+      for (let i = 0; i < N; i++) {
+        const xBase = -0.5 + (i - 3) * gap;
+        const t0 = Math.max(0, -0.5 - xBase);
+        const t1 = Math.min(1,  0.5 - xBase);
+        if (t1 <= t0) continue;
+        pts.push(xBase + t0, -0.5 + t0, z,  xBase + t1, -0.5 + t1, z);
+      }
+    }
+
+    if (type === 'pentashield-top') {
+      // 7 diagonal lines on the top face (y = +0.5).
+      // Line 4 (i=3) runs exactly corner-to-corner: (-0.5,+0.5) → (+0.5,-0.5) in XZ.
+      // That means xBase = -0.5 (x = -0.5 + t, z = 0.5 - t, t in [0,1]).
+      // The 3 lines either side are spaced by gap = 1/3 in xBase.
+      const y = 0.501;
+      const N = 7;
+      const gap = 1 / 3;
+      for (let i = 0; i < N; i++) {
+        const xBase = -0.5 + (i - 3) * gap;
+        const t0 = Math.max(0, -0.5 - xBase);
+        const t1 = Math.min(1,  0.5 - xBase);
+        if (t1 <= t0) continue;
+        pts.push(xBase + t0, y,  0.5 - t0,  xBase + t1, y,  0.5 - t1);
+      }
     }
 
     if (!pts.length) return;
@@ -494,8 +538,9 @@
           } else if (_INCLINE_TYPES.has(cell.object)) {
             mesh = new THREE.Mesh(_incGeos[cell.object], mat);
             mesh.rotation.y = _DIR_ROT[cell.direction] ?? 0;
-            if (cell.object === 'cube-doorway' || cell.object === 'cube-window') {
-              _addDecalLines(mesh, cell.object, cell.direction, mat);
+            if (cell.object === 'cube-doorway' || cell.object === 'cube-window' ||
+                cell.object === 'pentashield-side' || cell.object === 'pentashield-top') {
+              _addDecalLines(mesh, cell.object);
             }
           } else {
             return;
@@ -529,8 +574,9 @@
     } else if (_INCLINE_TYPES.has(obj)) {
       mesh = new THREE.Mesh(_incGeos[obj], mat);
       mesh.rotation.y = _DIR_ROT[App.state.placeDirection] ?? 0;
-      if (obj === 'cube-doorway' || obj === 'cube-window') {
-        _addDecalLines(mesh, obj, App.state.placeDirection, mat);
+      if (obj === 'cube-doorway' || obj === 'cube-window' ||
+          obj === 'pentashield-side' || obj === 'pentashield-top') {
+        _addDecalLines(mesh, obj);
       }
     } else {
       return;

@@ -1,8 +1,14 @@
 # Base Design Tool — Architecture
-# v3.1 · 2026-05-09
+# v3.2 · 2026-05-11
 
-Browser-based 3D voxel base planner for Dune Awakening.
+Browser-based 3D voxel base planner for Dune Awakening guild bases.
 Single user, no auth, Supabase persistence, Cloudflare Pages hosting.
+
+**Tools:** Build, Delete, Select, Area Select [shift+click/drag adds/removes], Paint [bulk repaint via sidebar], Duplicate, Pick Up [multi-ghost with Q/E rotate, Z/X level shift, T anchor cycle]
+
+**Objects:** Cube, Stair, Wedge, Wedge Inverted, Corner Wedge, Corner Wedge Inverted, Doorway, Window, Pentashield Side, Pentashield Top
+
+**Features:** Save/Load projects [Supabase], Stamps [save selection, place via ghost], welcome splash [load or new project], inline footprint editor [up to 6 connected 10×10 landclaims], camera [left-drag pan, right-drag rotate, scroll zoom, WASD pan], Settings modal [pan/rotate/zoom/UI scale sliders], X-ray toggle, placement ghost, N/S/E/W 2D compass, shortcuts strip, selection actions bar [duplicate/pick up/paint/delete, confirmation modal >10 pieces]
 
 ---
 
@@ -38,12 +44,15 @@ Single user, no auth, Supabase persistence, Cloudflare Pages hosting.
 
 - **Step 7** — Stamps: creation and management. Save selection → name prompt → normalise to origin → Supabase. Stamp list in sidebar with Place (no-op) and Delete (danger modal). Name uniqueness check. style.css stamp row styles.
 - **Step 8** — Stamps: placement + 2-column grid UI. Ghost follows cursor, Q/E rotates, T cycles anchor corner, red-if-blocked, click to place. Clicking tile activates placement ghost. Delete × on tile corner with danger modal. Thumbnails removed. Reuses multi-ghost infrastructure from 5d.
+- **Step 6c** — Two new directional object types: `pentashield-side` and `pentashield-top`. Identical to `cube-window`/`cube-doorway` in all respects (BoxGeometry base, N/E/S/W rotation, sidebar registration). Decoration: 7 solid diagonal lines, centre line anchored bottom-left → top-right corner, 3 lines evenly spaced either side. `pentashield-side`: decoration on south face. `pentashield-top`: decoration on top face. Decoration lines visible on ghost for window, doorway, and both pentashields. (app.js, ui.js, scene.js)
 
 ### To Do
+- **Step 6d** — Save overwrite fix: when saving a project and the entered name matches any existing project (including the currently open one), show a destructive confirmation modal warning the existing save will be overwritten. On confirm, update that row rather than inserting a new one. (app.js, ui.js)
+
 - **Step 9** — Perimeter selection (F key).
 - **Step 10** — X-ray toggle.
 - **Step 11** — Clear all (destructive modal).
-- **Step 12** — Hotkey strip rework: fully dynamic display based on active tool and selected object type. Resolves all known info-bar conflicts.
+- **Step 12** — Hotkey strip rework: static strip with contextual greying. T→Y remap for anchor (multi-ghost + stamp placement). Strip pills: B=Build, T=Delete, R=Select, Q/E=Rotate, Y=Anchor, Z/X=Level, F=Fill, Del=Remove sel, WASD=Move, Space=Raise, Ctrl=Lower. JS toggles .hotkey-inactive class (reduced opacity) on each pill based on state: Q/E active when directional type selected; Y/Z/X active during multi-ghost or stamp placement; Del/F active in Select/Area Select with selection; all others always active. Three bug fixes: Q/E dead capture in scene.js, Space preventDefault, Ctrl guard for solo-key only. (ui.js, app.js, scene.js, index.html, style.css)
 - **Step 13** — Stair side face lines: currently drawn as 8 per-step quads per side, producing visible step lines on the triangular side faces. Cosmetic only — replace with single triangle per side. Needs careful handling to avoid breaking EdgesGeometry or raycasting.
 
 ---
@@ -87,7 +96,7 @@ Editor-only (not persisted): `tool`, `selectedObject`, `placeDirection`, `select
 
 **building** — array of footprint landclaims. Each landclaim is 10×10 world units. Max 6 landclaims, must stay connected.
 
-**cells** — sparse Map keyed by "x,y,z". Each entry: object type, direction, colorId. Object is one of: cube, stair-solid, wedge-solid, wedge-solid-inverted, corner-wedge, corner-wedge-inverted, cube-doorway, cube-window. Direction is N/E/S/W for all types except cube, which is null.
+**cells** — sparse Map keyed by "x,y,z". Each entry: object type, direction, colorId. Object is one of: cube, stair-solid, wedge-solid, wedge-solid-inverted, corner-wedge, corner-wedge-inverted, cube-doorway, cube-window, pentashield-side, pentashield-top. Direction is N/E/S/W for all types except cube, which is null.
 
 **colors** — array of unnamed hex swatches. Index 0 is the default colour, never deletable.
 
@@ -126,7 +135,7 @@ Never hardcode colours. Full values in spec.md § CSS.
 ## Current State
 <!-- Keep ≤5 sentences: (a) last completed step, (b) what is broken and why, (c) what current step must accomplish. -->
 
-Steps 6a through 6b.3 and Steps 7–8 complete. All eight object types working. Stamps fully implemented (save, list, delete, placement, no thumbnails). Zoom damping tuned. Ready for Step 9 (Perimeter selection).
+Steps 6a–6c complete. All ten object types working including pentashield-side and pentashield-top with 7-line diagonal decoration. Ghost decoration visible for window, doorway, and pentashields. Ready for Step 6d (save overwrite fix).
 
 ---
 

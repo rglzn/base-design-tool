@@ -446,7 +446,7 @@
     });
   }
 
-  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window']);
+  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top']);
 
   function _updateDirectionHud() {
     const hud  = document.getElementById('hud-direction');
@@ -712,8 +712,10 @@
         else if (_INCLINE_TYPES.has(App.state.selectedObject)) { App.rotatePlaceDirection(1); Scene.markDirty(); }
         break;
       case 't': case 'T':
-        if (App.state.placingMultiGhost) { App.cycleMultiGhostAnchor(); }
-        else App.setTool('delete');
+        App.setTool('delete');
+        break;
+      case 'y': case 'Y':
+        if (App.state.placingMultiGhost || App.state.placingStamp) { App.cycleMultiGhostAnchor(); }
         break;
       case 'z': case 'Z':
         if (App.state.placingMultiGhost) { App.shiftMultiGhostLevel(1); }
@@ -737,6 +739,32 @@
         App.clearSelection();
         break;
     }
+  }
+
+  // ── Hotkey strip greying ───────────────────────────────────────
+  function _updateHotkeyStrip() {
+    const tool   = App.state.tool;
+    const obj    = App.state.selectedObject;
+    const inMG   = !!App.state.placingMultiGhost;
+    const inSt   = !!App.state.placingStamp;
+    const isDir  = _INCLINE_TYPES.has(obj);
+    const isSel  = tool === 'select' || tool === 'area-select';
+
+    const rules = {
+      q:     inMG || inSt || isDir,
+      e:     inMG || inSt || isDir,
+      y:     inMG || inSt,
+      z:     inMG || inSt,
+      x:     inMG || inSt,
+      del:   isSel,
+      f:     isSel,
+    };
+
+    document.querySelectorAll('#shortcuts-strip .shortcut-pill[data-hotkey]').forEach(pill => {
+      const key    = pill.dataset.hotkey;
+      const active = key in rules ? rules[key] : true;
+      pill.classList.toggle('hotkey-inactive', !active);
+    });
   }
 
   // ── Top bar wiring ─────────────────────────────────────────────
@@ -769,6 +797,7 @@
     document.querySelectorAll('.btn-object').forEach(btn => {
       btn.addEventListener('click', () => App.setSelectedObject(btn.dataset.object));
     });
+    // Pentashield buttons wired via .btn-object above — buttons exist in HTML.
     document.getElementById('btn-add-colour').addEventListener('click', () => {
       _showColourModal('Add Colour', '#3a6b8c', hex => App.addColor(hex));
     });
@@ -845,6 +874,7 @@
     _updateDirectionHud();
     _updateFootprintLabel();
     _renderStampList();
+    _updateHotkeyStrip();
   }
 
   function applyUiScale(scale) {

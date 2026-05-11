@@ -27,7 +27,7 @@ Dark near-black background. Sidebar left, fixed width. Top bar single row, logo 
 
 Favicon: lucide `hammer` icon rendered as SVG favicon.
 
-Keyboard shortcuts strip: a single always-visible row directly below the top bar (above the viewport), showing all active shortcuts as pill labels. Never hidden.
+Keyboard shortcuts strip: a single always-visible row directly below the top bar (above the viewport), showing all active shortcuts as pill labels. Static HTML. Pills: B=Build, T=Delete, R=Select, Q/E=Rotate, Y=Anchor, Z/X=Level, F=Fill, Del=Remove sel, WASD=Move, Space=Raise, Ctrl=Lower. A JS function (called on every UI refresh) toggles .hotkey-inactive class (40% opacity) on pills that are not currently meaningful: Q/E active only when a directional object type is selected; Y/Z/X active only during multi-ghost or stamp placement; Del and F active only in Select/Area Select tool; all others always active.
 
 ---
 
@@ -98,7 +98,7 @@ In Select mode, click cells on the same Y level to mark polygon vertices. Press 
 A stamp is a saved multi-cell structure: a named snapshot of a selection's cells (types, directions, colours), normalised to origin using the minimum bounding box corner (lowest x, y, z) as anchor.
 
 Saving: select objects → Save selection button → name prompt → written to Supabase stamps table. Name must be unique — if name already exists, show overwrite confirmation (danger modal).
-Placing: click stamp in sidebar → ghost follows cursor → Q/E rotates 90° → T cycles anchor corner through the stamp's footprint corners → click to place. Ghost turns red when any target cell is occupied; click does nothing. ESC cancels.
+Placing: click stamp in sidebar → ghost follows cursor → Q/E rotates 90° → Y cycles anchor corner through the stamp's footprint corners → click to place. Ghost turns red when any target cell is occupied; click does nothing. ESC cancels.
 Deleting: delete button on each stamp row → danger modal confirmation → removed from Supabase.
 Stamps are global (shared across all projects and users).
 

@@ -106,6 +106,10 @@ body {
   flex-shrink: 0;
 }
 
+.hotkey-inactive {
+  opacity: 0.35;
+}
+
 /* ── Sidebar ─────────────────────────────────────────────────────── */
 #sidebar {
   grid-area: sidebar;
