@@ -740,11 +740,12 @@
     const inSt   = !!App.state.placingStamp;
     const isDir  = _INCLINE_TYPES.has(obj);
     const isTri  = obj === 'triangle';
+    const isQE   = Geometry.getPieceFamily(obj) === 'square-family' || Geometry.getPieceFamily(obj) === 'triangle-family';
     const isSel  = tool === 'select' || tool === 'area-select';
 
     const rules = {
-      q:     inMG || inSt || isDir || isTri,
-      e:     inMG || inSt || isDir || isTri,
+      q:     inMG || inSt || isQE,
+      e:     inMG || inSt || isQE,
       y:     inMG || inSt,
       z:     inMG || inSt,
       x:     inMG || inSt,

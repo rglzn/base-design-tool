@@ -250,8 +250,8 @@
    * @returns {ReadonlyArray}
    */
   function getFaceDescriptors(type) {
-    if (type === 'square')   return SQUARE_FACES;
     if (type === 'triangle') return TRIANGLE_FACES;
+    if (PIECE_FAMILY[type] === 'square-family') return SQUARE_FACES;
     throw new Error(`geometry.getFaceDescriptors: unknown type "${type}"`);
   }
 

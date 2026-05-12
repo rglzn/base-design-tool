@@ -14,6 +14,8 @@ v2 uses a 12-rotation set. Rotation index 0–11 maps to angles 0°, 30°, 60°,
 
 **Attachment transform** — given piece A at world transform T_A, face f on A, and face g on piece B, the world transform T_B is computed so that face g sits flush against face f. Function signature: `getAttachmentTransform(T_A, faceDescA, faceDescB) → T_B`.
 
+**Square-family geometry origin convention** — all square-family geometry must be built with its origin at the cell corner (0,0,0), not the centre. `_rebuildPieces` applies a uniform `+0.5` offset on all axes to move the piece to its visual centre at render time. Every current and future square-family type must follow this convention — no per-type offset exceptions.
+
 **Triangle attachment edge** — the triangle has one canonical attachment edge: the north long side (one of its three rectangular side faces). This is the only face used for attachment in all placement contexts. The apex always points away from the attachment edge.
 
 **Triangle placement rules by context:**

@@ -65,7 +65,7 @@
     _groundPlane.userData.isGround = true;
     _scene.add(_groundPlane);
 
-    _squareGeo     = new THREE.BoxGeometry(1, 1, 1);
+    _squareGeo     = _makeSquareGeo();
     _squareEdgeGeo = new THREE.EdgesGeometry(_squareGeo);
     _triangleGeo   = _makeTriangleGeo();
     _triangleEdgeGeo = new THREE.EdgesGeometry(_triangleGeo);
@@ -181,6 +181,23 @@
     addLines(majorPts, 0x2d4060);
   }
 
+  // ── Square (cube) geometry — origin at cell corner [0,1] ─────────
+  function _makeSquareGeo() {
+    const pos = [];
+    function q(a,b,c,d){ pos.push(...a,...b,...c,...a,...c,...d); }
+    q([0,1,0],[1,1,0],[1,0,0],[0,0,0]); // back  (z=0, -Z)
+    q([0,0,1],[1,0,1],[1,1,1],[0,1,1]); // front (z=1, +Z)
+    q([0,0,0],[1,0,0],[1,0,1],[0,0,1]); // bottom (y=0, -Y)
+    q([0,1,1],[1,1,1],[1,1,0],[0,1,0]); // top   (y=1, +Y)
+    q([0,0,1],[0,1,1],[0,1,0],[0,0,0]); // left  (x=0, -X)
+    q([1,0,0],[1,1,0],[1,1,1],[1,0,1]); // right (x=1, +X)
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.computeVertexNormals();
+    geo.translate(-0.5, -0.5, -0.5);
+    return geo;
+  }
+
   // ── Triangle prism geometry ──────────────────────────────────────
   // Equilateral triangle prism, side 1, height 1.
   // Matches the TRIANGLE_FACES descriptors in geometry.js:
@@ -244,8 +261,17 @@
         polygonOffsetUnits: 1,
       });
 
-      const geo     = isSquare ? _squareGeo     : _triangleGeo;
-      const edgeGeo = isSquare ? _squareEdgeGeo : _triangleEdgeGeo;
+      let geo, edgeGeo;
+      if (!isSquare) {
+        geo     = _triangleGeo;
+        edgeGeo = _triangleEdgeGeo;
+      } else if (piece.type === 'square') {
+        geo     = _squareGeo;
+        edgeGeo = _squareEdgeGeo;
+      } else {
+        geo     = _makeInclineGeo(piece.type);
+        edgeGeo = new THREE.EdgesGeometry(geo);
+      }
 
       const mesh = new THREE.Mesh(geo, mat);
       // Square centre offset: +0.5 on all axes (BoxGeometry centred at origin).
@@ -268,6 +294,7 @@
       mesh.userData.pieceId = piece.id;
       mesh.userData.isPiece = true;
       mesh.add(new THREE.LineSegments(edgeGeo, selected ? _selEdgeMat : _edgeMat));
+      _addDecalLines(mesh, piece.type);
       _pieceGroup.add(mesh);
     });
   }
@@ -280,182 +307,193 @@
     function t(a,b,c)  { pos.push(...a,...b,...c); }
 
     if (type === 'wedge-solid') {
-      // High at back (-z), low at front (+z)
-      t([-0.5,-0.5, 0.5],[-0.5, 0.5,-0.5],[-0.5,-0.5,-0.5]);
-      t([ 0.5,-0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5, 0.5]);
-      q([-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]);
-      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5,-0.5, 0.5],[-0.5,-0.5, 0.5]);
-      q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]);
+      // High at back (z=0), low at front (z=1). Origin at cell corner [0,1].
+      t([0,0,1],[0,1,0],[0,0,0]); // left tri (normal -X)
+      t([1,0,0],[1,1,0],[1,0,1]); // right tri (normal +X)
+      q([0,0,1],[1,0,1],[1,1,0],[0,1,0]); // slope (low-front → high-back)
+      q([0,0,0],[1,0,0],[1,0,1],[0,0,1]); // base (normal -Y)
+      q([0,1,0],[1,1,0],[1,0,0],[0,0,0]); // back wall (normal -Z)
     }
 
     if (type === 'wedge-solid-inverted') {
-      t([-0.5,+0.5,+0.5], [-0.5,+0.5,-0.5], [-0.5,-0.5,-0.5]);          // left tri
-      t([+0.5,+0.5,+0.5], [+0.5,-0.5,-0.5], [+0.5,+0.5,-0.5]);          // right tri
-      q([-0.5,-0.5,-0.5], [+0.5,-0.5,-0.5], [+0.5,+0.5,+0.5], [-0.5,+0.5,+0.5]); // slope
-      q([-0.5,+0.5,+0.5], [+0.5,+0.5,+0.5], [+0.5,+0.5,-0.5], [-0.5,+0.5,-0.5]); // top flat
-      q([-0.5,+0.5,-0.5], [+0.5,+0.5,-0.5], [+0.5,-0.5,-0.5], [-0.5,-0.5,-0.5]); // back
+      // High front (z=1), low back (z=0). Origin at cell corner [0,1].
+      t([0,1,1],[0,1,0],[0,0,0]); // left tri (normal -X)
+      t([1,1,1],[1,0,0],[1,1,0]); // right tri (normal +X)
+      q([0,0,0],[1,0,0],[1,1,1],[0,1,1]); // slope (low-back → high-front)
+      q([0,1,1],[1,1,1],[1,1,0],[0,1,0]); // top flat (normal +Y)
+      q([0,1,0],[1,1,0],[1,0,0],[0,0,0]); // back wall (normal -Z)
     }
 
     if (type === 'stair-solid') {
-      // 8 uniform steps rising from front (+z) to back (-z).
-      // Cell occupies x: [-0.5,0.5], y: [-0.5,0.5], z: [-0.5,0.5].
-      // Each step: depth = 1/8 along z, height = 1/8 along y.
+      // 8 uniform steps rising from front (z=1) to back (z=0). Origin at cell corner [0,1].
       const N  = 8;
       const sd = 1 / N;
       const sh = 1 / N;
-      // Bottom face
-      q([-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5,-0.5,-0.5],[-0.5,-0.5,-0.5]);
-      // Back face (z = -0.5): full rectangle
-      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]);
+      // Base (y=0, normal -Y)
+      q([0,0,0],[1,0,0],[1,0,1],[0,0,1]);
+      // Back face (z=0, normal -Z)
+      q([0,1,0],[1,1,0],[1,0,0],[0,0,0]);
       // Treads and risers.
       for (let i = 0; i < N; i++) {
-        const z0 =  0.5 - i * sd;
-        const z1 =  0.5 - (i + 1) * sd;
-        const yB = -0.5 + i * sh;
-        const yT = -0.5 + (i + 1) * sh;
-        // Riser: normal toward +Z. CCW from +Z: BL→BR→TR, BL→TR→TL.
-        t([-0.5, yB, z0], [ 0.5, yB, z0], [ 0.5, yT, z0]);
-        t([-0.5, yB, z0], [ 0.5, yT, z0], [-0.5, yT, z0]);
-        // Tread: normal toward +Y. CCW from +Y: FL→FR→BR, FL→BR→BL.
-        t([-0.5, yT, z0], [ 0.5, yT, z0], [ 0.5, yT, z1]);
-        t([-0.5, yT, z0], [ 0.5, yT, z1], [-0.5, yT, z1]);
+        const z0 =  1 - i * sd;       // front edge of this step (high z)
+        const z1 =  1 - (i + 1) * sd; // back edge of this step (lower z)
+        const yB = i * sh;             // bottom of riser
+        const yT = (i + 1) * sh;       // top of riser / tread
+        // Riser: normal +Z (front-facing). BL→BR→TR→TL.
+        q([0,yB,z0],[1,yB,z0],[1,yT,z0],[0,yT,z0]);
+        // Tread: normal +Y (top-facing). FL→FR→BR→BL.
+        q([0,yT,z0],[1,yT,z0],[1,yT,z1],[0,yT,z1]);
       }
-      // Left side (x = -0.5): one quad per step, y=-0.5 to tread top, normal toward -X.
+      // Left side (x=0, normal -X): BF→TF→TB→BB per step.
       for (let i = 0; i < N; i++) {
-        const z0 =  0.5 - i * sd;
-        const z1 =  0.5 - (i + 1) * sd;
-        const yT = -0.5 + (i + 1) * sh;
-        q([-0.5,-0.5, z0],[-0.5,-0.5, z1],[-0.5, yT, z1],[-0.5, yT, z0]);
+        const z0 =  1 - i * sd;
+        const z1 =  1 - (i + 1) * sd;
+        const yT = (i + 1) * sh;
+        q([0,0,z0],[0,yT,z0],[0,yT,z1],[0,0,z1]);
       }
-      // Right side (x = +0.5): mirror, normal toward +X.
+      // Right side (x=1, normal +X): BB→TB→TF→BF per step.
       for (let i = 0; i < N; i++) {
-        const z0 =  0.5 - i * sd;
-        const z1 =  0.5 - (i + 1) * sd;
-        const yT = -0.5 + (i + 1) * sh;
-        q([ 0.5,-0.5, z1],[ 0.5,-0.5, z0],[ 0.5, yT, z0],[ 0.5, yT, z1]);
+        const z0 =  1 - i * sd;
+        const z1 =  1 - (i + 1) * sd;
+        const yT = (i + 1) * sh;
+        q([1,0,z1],[1,yT,z1],[1,yT,z0],[1,0,z0]);
       }
     }
 
     if (type === 'corner-wedge') {
-      // Square pyramid. Base at y=-0.5, apex at local NW top corner (-0.5, +0.5, -0.5).
-      // For direction N: NW = (-x, +y, -z). Apex corner rotates with _DIR_ROT.
-      // Faces: base (bottom quad), south slope, east slope, north tri, west tri.
-      const apex = [-0.5, 0.5, -0.5];
-      // Base (y = -0.5), normal down
-      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5,-0.5, 0.5],[-0.5,-0.5, 0.5]);
-      // South face (z = +0.5 edge → apex): diagonal slope
-      t([-0.5,-0.5, 0.5], [ 0.5,-0.5, 0.5], apex);
-      // East face (x = +0.5 edge → apex): diagonal slope
-      t([ 0.5,-0.5,-0.5], apex, [ 0.5,-0.5, 0.5]);
-      // North face (z = -0.5 edge): right-angle vertical triangle
-      t([-0.5,-0.5,-0.5], apex, [ 0.5,-0.5,-0.5]);
-      // West face (x = -0.5 edge): right-angle vertical triangle
-      t([-0.5,-0.5, 0.5], apex, [-0.5,-0.5,-0.5]);
+      // Square pyramid. Base at y=0, apex at NW top corner (0,1,0). Origin at cell corner [0,1].
+      const apex = [0,1,0];
+      // Base (y=0, normal -Y)
+      q([0,0,0],[1,0,0],[1,0,1],[0,0,1]);
+      // South face (z=1 edge → apex): slope
+      t([0,0,1],[1,0,1],apex);
+      // East face (x=1 edge → apex): slope
+      t([1,0,0],apex,[1,0,1]);
+      // North face (z=0 edge, normal -Z)
+      t([0,0,0],apex,[1,0,0]);
+      // West face (x=0 edge, normal -X)
+      t([0,0,1],apex,[0,0,0]);
     }
 
     if (type === 'corner-wedge-inverted') {
-      // Corner wedge flipped vertically. Full top face, apex at local NW bottom corner (-0.5, -0.5, -0.5).
-      const apex = [-0.5, -0.5, -0.5];
-      // Top face (y = +0.5), normal up
-      q([-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]);
-      // South face (z = +0.5 edge → apex): diagonal slope
-      t([ 0.5, 0.5, 0.5], [-0.5, 0.5, 0.5], apex);
-      // East face (x = +0.5 edge → apex): diagonal slope
-      t([ 0.5, 0.5, 0.5], apex, [ 0.5, 0.5,-0.5]);
-      // North face (z = -0.5 edge): right-angle vertical triangle
-      t([ 0.5, 0.5,-0.5], apex, [-0.5, 0.5,-0.5]);
-      // West face (x = -0.5 edge): right-angle vertical triangle
-      t([-0.5, 0.5,-0.5], apex, [-0.5, 0.5, 0.5]);
+      // Corner wedge flipped vertically. Full top face, apex at NW bottom corner (0,0,0). Origin at cell corner [0,1].
+      const apex = [0,0,0];
+      // Top face (y=1, normal +Y)
+      q([0,1,1],[1,1,1],[1,1,0],[0,1,0]);
+      // South face (z=1 edge → apex): slope
+      t([1,1,1],[0,1,1],apex);
+      // East face (x=1 edge → apex): slope
+      t([1,1,1],apex,[1,1,0]);
+      // North face (z=0 edge, normal -Z)
+      t([1,1,0],apex,[0,1,0]);
+      // West face (x=0 edge, normal -X)
+      t([0,1,0],apex,[0,1,1]);
     }
 
     if (type === 'half-wedge') {
-      // Lower half of cell only (y: -0.5 → 0). High at back (-z, y=0), low front (+z, y=-0.5).
-      // Faces: base, back wall, left tri, right tri, slope. No top.
-      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5,-0.5, 0.5],[-0.5,-0.5, 0.5]); // base
-      q([-0.5,-0.5,-0.5],[-0.5, 0.0,-0.5],[ 0.5, 0.0,-0.5],[ 0.5,-0.5,-0.5]); // back wall
-      t([-0.5,-0.5, 0.5],[-0.5, 0.0,-0.5],[-0.5,-0.5,-0.5]);                   // left tri
-      t([ 0.5,-0.5,-0.5],[ 0.5, 0.0,-0.5],[ 0.5,-0.5, 0.5]);                   // right tri
-      q([-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5, 0.0,-0.5],[-0.5, 0.0,-0.5]); // slope
+      // Lower half of cell (y: 0→0.5). High at back (z=0, y=0.5), low front (z=1, y=0). Origin at cell corner [0,1].
+      q([0,0,0],[1,0,0],[1,0,1],[0,0,1]); // base (normal -Y)
+      q([0,0.5,0],[1,0.5,0],[1,0,0],[0,0,0]); // back wall (normal -Z)
+      t([0,0,1],[0,0.5,0],[0,0,0]); // left tri (normal -X)
+      t([1,0,0],[1,0.5,0],[1,0,1]); // right tri (normal +X)
+      q([0,0,1],[1,0,1],[1,0.5,0],[0,0.5,0]); // slope (normal up-outward)
     }
 
     if (type === 'half-wedge-block') {
-      // Full cell. Lower half: cube (y: -0.5→0). Upper half: wedge (y: 0→+0.5), high at back (-z).
-      // Faces: base, back full, front half (lower cube face), left pentagon, right pentagon, slope.
-      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5,-0.5, 0.5],[-0.5,-0.5, 0.5]); // base
-      q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]); // back full
-      q([-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5, 0.0, 0.5],[-0.5, 0.0, 0.5]); // front half (cube portion)
-      // Left side: pentagon = lower rect + upper tri
-      q([-0.5,-0.5, 0.5],[-0.5, 0.0, 0.5],[-0.5, 0.0,-0.5],[-0.5,-0.5,-0.5]); // left lower rect
-      t([-0.5, 0.0, 0.5],[-0.5, 0.5,-0.5],[-0.5, 0.0,-0.5]);                   // left upper tri
-      // Right side: pentagon = lower rect + upper tri
-      q([ 0.5,-0.5,-0.5],[ 0.5, 0.0,-0.5],[ 0.5, 0.0, 0.5],[ 0.5,-0.5, 0.5]); // right lower rect
-      t([ 0.5, 0.0,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.0, 0.5]);                   // right upper tri
-      q([-0.5, 0.0, 0.5],[ 0.5, 0.0, 0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // slope
+      // Full cell. Lower cube (y:0→0.5) + upper wedge (y:0.5→1), high at back (z=0). Origin at cell corner [0,1].
+      q([0,0,0],[1,0,0],[1,0,1],[0,0,1]); // base (normal -Y)
+      q([0,1,0],[1,1,0],[1,0,0],[0,0,0]); // back full (normal -Z)
+      q([0,0,1],[1,0,1],[1,0.5,1],[0,0.5,1]); // front half cube (normal +Z)
+      // Left side (x=0, normal -X): lower rect + upper tri
+      q([0,0,1],[0,0.5,1],[0,0.5,0],[0,0,0]); // left lower rect
+      t([0,0.5,1],[0,1,0],[0,0.5,0]); // left upper tri
+      // Right side (x=1, normal +X): lower rect + upper tri
+      q([1,0,0],[1,0.5,0],[1,0.5,1],[1,0,1]); // right lower rect
+      t([1,0.5,0],[1,1,0],[1,0.5,1]); // right upper tri
+      q([0,0.5,1],[1,0.5,1],[1,1,0],[0,1,0]); // slope
     }
 
     if (type === 'half-wedge-inverted') {
-      // Upper half of cell only (y: 0 → +0.5). Flat top, slope descends front (+z) to y=0.
-      // Faces: top, back wall, left tri, right tri, slope. No base.
-      q([-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // top
-      q([-0.5, 0.0,-0.5],[-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.0,-0.5]); // back wall
-      t([-0.5, 0.5,-0.5],[-0.5, 0.0,-0.5],[-0.5, 0.5, 0.5]);                   // left tri (CCW from -x)
-      t([ 0.5, 0.0,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5]);                   // right tri
-      q([-0.5, 0.0,-0.5],[ 0.5, 0.0,-0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]); // slope
+      // Upper half of cell (y:0.5→1). Flat top, slope descends to front (z=1, y=0.5). Origin at cell corner [0,1].
+      q([0,1,1],[1,1,1],[1,1,0],[0,1,0]); // top (normal +Y)
+      q([0,1,0],[1,1,0],[1,0.5,0],[0,0.5,0]); // back wall (normal -Z)
+      t([0,1,0],[0,0.5,0],[0,1,1]); // left tri (normal -X)
+      t([1,0.5,0],[1,1,0],[1,1,1]); // right tri (normal +X)
+      q([0,0.5,0],[1,0.5,0],[1,1,1],[0,1,1]); // slope (normal up-outward, rising toward +Z)
     }
 
     if (type === 'half-wedge-block-inverted') {
-      // Full cell. Upper half: cube (y: 0→+0.5). Lower half: inverted wedge (y: -0.5→0), slope at front.
-      // Faces: top, back full, front half (upper cube face), left pentagon, right pentagon, slope.
-      q([-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5, 0.5,-0.5],[-0.5, 0.5,-0.5]); // top
-      q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]); // back full
-      q([-0.5, 0.0, 0.5],[ 0.5, 0.0, 0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]); // front half (cube portion)
-      // Left side: pentagon = upper rect + lower tri
-      q([-0.5, 0.0,-0.5],[-0.5, 0.0, 0.5],[-0.5, 0.5, 0.5],[-0.5, 0.5,-0.5]); // left upper rect
-      t([-0.5,-0.5,-0.5],[-0.5, 0.0, 0.5],[-0.5, 0.0,-0.5]);                   // left lower tri
-      // Right side: pentagon = upper rect + lower tri
-      q([ 0.5, 0.0, 0.5],[ 0.5, 0.0,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5]); // right upper rect
-      t([ 0.5, 0.0,-0.5],[ 0.5, 0.0, 0.5],[ 0.5,-0.5,-0.5]);                   // right lower tri
-      q([-0.5,-0.5,-0.5],[ 0.5,-0.5,-0.5],[ 0.5, 0.0, 0.5],[-0.5, 0.0, 0.5]); // slope
+      // Full cell. Upper cube (y:0.5→1) + lower inv-wedge (y:0→0.5), slope at front (z=1). Origin at cell corner [0,1].
+      q([0,1,1],[1,1,1],[1,1,0],[0,1,0]); // top (normal +Y)
+      q([0,1,0],[1,1,0],[1,0,0],[0,0,0]); // back full (normal -Z)
+      q([0,0.5,1],[1,0.5,1],[1,1,1],[0,1,1]); // front half cube (normal +Z)
+      // Left side (x=0, normal -X): upper rect + lower tri
+      q([0,0.5,0],[0,0.5,1],[0,1,1],[0,1,0]); // left upper rect
+      t([0,0,0],[0,0.5,1],[0,0.5,0]); // left lower tri
+      // Right side (x=1, normal +X): upper rect + lower tri
+      q([1,0.5,1],[1,0.5,0],[1,1,0],[1,1,1]); // right upper rect
+      t([1,0.5,0],[1,0.5,1],[1,0,0]); // right lower tri
+      q([0,0,0],[1,0,0],[1,0.5,1],[0,0.5,1]); // slope (low-back → high-front)
     }
 
     if (type === 'cube-doorway') {
-      // Full cube geometry (same as BoxGeometry but manual, so EdgesGeometry works uniformly).
-      // Decorative arch outline added as extra line geometry separately in _rebuildInclines.
-      q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5],[-0.5,-0.5,-0.5]); // back
-      q([-0.5,-0.5, 0.5],[-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5,-0.5, 0.5]); // front
-      q([-0.5,-0.5,-0.5],[-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5,-0.5,-0.5]); // bottom
-      q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]); // top
-      q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[-0.5, 0.5, 0.5],[-0.5,-0.5, 0.5]); // left
-      q([ 0.5,-0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]); // right
+      // Full cube geometry. Origin at cell corner [0,1].
+      q([0,1,0],[1,1,0],[1,0,0],[0,0,0]); // back (z=0, normal -Z)
+      q([0,0,1],[1,0,1],[1,1,1],[0,1,1]); // front (z=1, normal +Z)
+      q([0,0,0],[1,0,0],[1,0,1],[0,0,1]); // bottom (y=0, normal -Y)
+      q([0,1,1],[1,1,1],[1,1,0],[0,1,0]); // top (y=1, normal +Y)
+      q([0,0,1],[0,1,1],[0,1,0],[0,0,0]); // left (x=0, normal -X)
+      q([1,0,0],[1,1,0],[1,1,1],[1,0,1]); // right (x=1, normal +X)
     }
 
     if (type === 'cube-window') {
-      // Same full cube geometry as cube-doorway.
-      q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5],[-0.5,-0.5,-0.5]); // back
-      q([-0.5,-0.5, 0.5],[-0.5, 0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5,-0.5, 0.5]); // front
-      q([-0.5,-0.5,-0.5],[-0.5,-0.5, 0.5],[ 0.5,-0.5, 0.5],[ 0.5,-0.5,-0.5]); // bottom
-      q([-0.5, 0.5,-0.5],[ 0.5, 0.5,-0.5],[ 0.5, 0.5, 0.5],[-0.5, 0.5, 0.5]); // top
-      q([-0.5,-0.5,-0.5],[-0.5, 0.5,-0.5],[-0.5, 0.5, 0.5],[-0.5,-0.5, 0.5]); // left
-      q([ 0.5,-0.5, 0.5],[ 0.5, 0.5, 0.5],[ 0.5, 0.5,-0.5],[ 0.5,-0.5,-0.5]); // right
+      // Same full cube geometry as cube-doorway. Origin at cell corner [0,1].
+      q([0,1,0],[1,1,0],[1,0,0],[0,0,0]); // back (z=0, normal -Z)
+      q([0,0,1],[1,0,1],[1,1,1],[0,1,1]); // front (z=1, normal +Z)
+      q([0,0,0],[1,0,0],[1,0,1],[0,0,1]); // bottom (y=0, normal -Y)
+      q([0,1,1],[1,1,1],[1,1,0],[0,1,0]); // top (y=1, normal +Y)
+      q([0,0,1],[0,1,1],[0,1,0],[0,0,0]); // left (x=0, normal -X)
+      q([1,0,0],[1,1,0],[1,1,1],[1,0,1]); // right (x=1, normal +X)
+    }
+
+    if (type === 'pentashield-side') {
+      // Full cube geometry — decal lines added by _addDecalLines. Origin at cell corner [0,1].
+      q([0,1,0],[1,1,0],[1,0,0],[0,0,0]); // back  (z=0, -Z)
+      q([0,0,1],[1,0,1],[1,1,1],[0,1,1]); // front (z=1, +Z)
+      q([0,0,0],[1,0,0],[1,0,1],[0,0,1]); // bottom (y=0, -Y)
+      q([0,1,1],[1,1,1],[1,1,0],[0,1,0]); // top   (y=1, +Y)
+      q([0,0,1],[0,1,1],[0,1,0],[0,0,0]); // left  (x=0, -X)
+      q([1,0,0],[1,1,0],[1,1,1],[1,0,1]); // right (x=1, +X)
+    }
+
+    if (type === 'pentashield-top') {
+      // Full cube geometry — decal lines added by _addDecalLines. Origin at cell corner [0,1].
+      q([0,1,0],[1,1,0],[1,0,0],[0,0,0]); // back  (z=0, -Z)
+      q([0,0,1],[1,0,1],[1,1,1],[0,1,1]); // front (z=1, +Z)
+      q([0,0,0],[1,0,0],[1,0,1],[0,0,1]); // bottom (y=0, -Y)
+      q([0,1,1],[1,1,1],[1,1,0],[0,1,0]); // top   (y=1, +Y)
+      q([0,0,1],[0,1,1],[0,1,0],[0,0,0]); // left  (x=0, -X)
+      q([1,0,0],[1,1,0],[1,1,1],[1,0,1]); // right (x=1, +X)
     }
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.computeVertexNormals();
+    geo.translate(-0.5, -0.5, -0.5);
     return geo;
   }
 
   // ── Decal lines — doorway arch / window rect on local south face (z=+0.5) ──
   // Attached as a child of the mesh; mesh rotation already handles direction.
+  // Coordinates are in centred mesh-local space (-0.5→+0.5 on all axes).
+  // South face is at z=+0.5, top face at y=+0.5.
   function _addDecalLines(mesh, type) {
     const pts = [];
-    const z   =  0.501; // just in front of the south face to avoid z-fighting
-    const hw  =  0.35;  // half-width  (~70% of face)
+    const z   =  0.501; // just in front of the south face
+    const hw  =  0.35;  // half-width from cell centre
     const bot = -0.5;   // bottom of cell
 
     if (type === 'cube-doorway') {
-      // Three edges only: left vertical, right vertical, top horizontal.
-      // ~70% face width (hw = 0.35), full face height (-0.5 to +0.5). No bottom edge.
       const top = 0.40;
       const hw2 = hw - 0.05;
       pts.push(-hw,  bot, z,  -hw,  top, z);  // outer left
@@ -468,9 +506,8 @@
     }
 
     if (type === 'cube-window') {
-      // Rectangle outline centred on the south face.
-      const y0 = -0.175;
-      const y1 =  0.35;
+      const y0  = -0.175;
+      const y1  =  0.35;
       const hw2 = hw - 0.05;
       const y02 = y0 + 0.05;
       const y12 = y1 - 0.05;
@@ -485,11 +522,8 @@
     }
 
     if (type === 'pentashield-side') {
-      // 7 diagonal lines on the south face (z = +0.5).
-      // Line 4 (i=3) runs exactly corner-to-corner: (-0.5,-0.5) → (+0.5,+0.5).
-      // That means xBase = -0.5 (x = -0.5 + t at y = -0.5 + t, t in [0,1]).
-      // The 3 lines either side are spaced by gap = 1/3 in xBase.
-      const z = 0.501;
+      // 7 diagonal lines on the south face (z=0.501).
+      // Line 4 (i=3) runs corner-to-corner: (-0.5,-0.5) → (+0.5,+0.5) in XY.
       const N = 7;
       const gap = 1 / 3;
       for (let i = 0; i < N; i++) {
@@ -502,10 +536,8 @@
     }
 
     if (type === 'pentashield-top') {
-      // 7 diagonal lines on the top face (y = +0.5).
-      // Line 4 (i=3) runs exactly corner-to-corner: (-0.5,+0.5) → (+0.5,-0.5) in XZ.
-      // That means xBase = -0.5 (x = -0.5 + t, z = 0.5 - t, t in [0,1]).
-      // The 3 lines either side are spaced by gap = 1/3 in xBase.
+      // 7 diagonal lines on the top face (y=0.501).
+      // Line 4 (i=3) runs corner-to-corner: (-0.5,+0.5) → (+0.5,-0.5) in XZ.
       const y = 0.501;
       const N = 7;
       const gap = 1 / 3;
@@ -683,9 +715,16 @@
     if (hit.type === 'ground') {
       // ── CTX_FLAT: ground ───────────────────────────────────────
       _ghostContext = 'flat';
-      if (newType === 'square') {
-        ghostPos      = { x: hit.gridX, y: 0, z: hit.gridZ };
-        rotationIndex = 0;
+      if (Geometry.getPieceFamily(newType) === 'square-family') {
+        if (newType === 'square') {
+          ghostPos      = { x: hit.gridX, y: 0, z: hit.gridZ };
+          rotationIndex = 0;
+        } else {
+          // Other square-family types are directional: Q/E cycles N/E/S/W.
+          const slot    = ((_ghostRotationOffset % 4) + 4) % 4;
+          rotationIndex = _FLAT_ROTS[slot];
+          ghostPos      = { x: hit.gridX, y: 0, z: hit.gridZ };
+        }
       } else {
         // Triangle on ground: attachment edge flush to the cardinal edge of the
         // target cell.  Rotate the attachment face localPosition (XZ only) by
@@ -747,8 +786,8 @@
       if (isTriPiece && isHorizFace) {
         // ── CTX_TRI: top/bottom of a triangle piece ───────────────
         _ghostContext = 'tri';
-        if (newType === 'square') {
-          // Square on tri top/bottom: Q/E cycles 3 slots, one per triangle edge.
+        if (Geometry.getPieceFamily(newType) === 'square-family') {
+          // Square-family on tri top/bottom: Q/E cycles 3 slots, one per triangle edge.
           // slot 0 → N face (index 2), slot 1 → SW face (index 3), slot 2 → SE face (index 4).
           // Position: attach cube bottom/top face to the triangle top/bottom face.
           // Rotation: align one cube side face to the selected triangle edge normal.
@@ -805,8 +844,8 @@
       } else if (isHorizFace) {
         // ── CTX_FLAT: top/bottom of a non-triangle piece ──────────
         _ghostContext = 'flat';
-        if (newType === 'square') {
-          // Square: use getAttachmentTransform normally
+        if (Geometry.getPieceFamily(newType) === 'square-family') {
+          // Square-family: use getAttachmentTransform for position; rotation depends on type.
           const facesB  = G.getFaceDescriptors(newType);
           let bestFaceB = null, bestFaceBDot = -Infinity;
           const fAWorld = G.faceDescInWorld(bestFaceA, T_A);
@@ -821,7 +860,14 @@
           if (!bestFaceB) { App.clearGhost(); return; }
           selfFaceIndex = bestFaceB.index;
           const T_B = G.getAttachmentTransform(T_A, bestFaceA, bestFaceB);
-          rotationIndex = T_B.rotationIndex;
+          // square is non-directional: always rotationIndex 0.
+          // All other square-family types are directional: Q/E cycles N/E/S/W.
+          if (newType === 'square') {
+            rotationIndex = 0;
+          } else {
+            const slot = ((_ghostRotationOffset % 4) + 4) % 4;
+            rotationIndex = _FLAT_ROTS[slot];
+          }
           // T_B.position is the centroid of the new square; ghost.position must
           // be the SW-bottom corner (_rebuildGhost adds +0.5 to render at centroid).
           ghostPos = {
@@ -852,7 +898,7 @@
       } else {
         // ── CTX_SIDE: side face of any piece ──────────────────────
         _ghostContext = 'side';
-        if (newType !== 'triangle') {
+        if (Geometry.getPieceFamily(newType) === 'square-family') {
           const facesB  = G.getFaceDescriptors(newType);
           let bestFaceB = null, bestFaceBDot = -Infinity;
           const fAWorld = G.faceDescInWorld(bestFaceA, T_A);
@@ -867,7 +913,14 @@
           if (!bestFaceB) { App.clearGhost(); return; }
           selfFaceIndex = bestFaceB.index;
           const T_B = G.getAttachmentTransform(T_A, bestFaceA, bestFaceB);
-          rotationIndex = T_B.rotationIndex;
+          // square is non-directional: rotation from face alignment only.
+          // Other square-family types are directional: apply Q/E offset on top.
+          if (newType === 'square') {
+            rotationIndex = T_B.rotationIndex;
+          } else {
+            const slot = ((_ghostRotationOffset % 4) + 4) % 4;
+            rotationIndex = _FLAT_ROTS[slot];
+          }
           // T_B.position is the centroid of the new square (measured from piece
           // origin conventions).  When piece A is a square its pieceOrigin has a
           // +0.5 Y offset baked in, so T_B.position.y is already centroid Y and
@@ -900,7 +953,7 @@
       // For CTX_TRI triangle: inherit existing triangle's position and rotationIndex
       // directly — place flush above (y+1) or below (y-1) without going through
       // getAttachmentTransform, which gives incorrect half-height results.
-      if (_ghostContext === 'tri' && newType === 'triangle') {
+      if (_ghostContext === 'tri' && Geometry.getPieceFamily(newType) === 'triangle-family') {
         selfFaceIndex = G.TRIANGLE_ATTACHMENT_FACE_INDEX;
         const isTop = bestFaceA.outwardNormal.y > 0;
         ghostPos = {
@@ -933,14 +986,19 @@
 
   /*
    * Cycle the ghost's rotation by dir (+1 or -1).
-   * Active in CTX_FLAT (4 cardinal slots) and CTX_TRI when placing a square
-   * (3 triangle-edge slots).  No-op in CTX_SIDE or CTX_TRI with triangle.
+   * Active in CTX_FLAT (4 cardinal slots), CTX_TRI when placing a square-family
+   * piece (3 triangle-edge slots), and CTX_SIDE for non-square square-family
+   * types (free rotation offset applied on top of face-alignment result).
+   * No-op for CTX_SIDE with square or triangle, and CTX_TRI with triangle.
    */
   function cycleGhostRotation(dir) {
     if (!_hoverHit) return;
     const ghost = App.state.ghost;
-    const isTriSquare = _ghostContext === 'tri' && ghost && ghost.type === 'square';
-    if (_ghostContext !== 'flat' && !isTriSquare) return;
+    const isTriSquare = _ghostContext === 'tri' && ghost && Geometry.getPieceFamily(ghost.type) === 'square-family';
+    const isSideIncline = _ghostContext === 'side' && ghost
+      && Geometry.getPieceFamily(ghost.type) === 'square-family'
+      && ghost.type !== 'square';
+    if (_ghostContext !== 'flat' && !isTriSquare && !isSideIncline) return;
     if (isTriSquare) {
       _ghostRotationOffset = ((_ghostRotationOffset - dir) % 3 + 3) % 3;
     } else {
@@ -966,7 +1024,14 @@
 
     const mat      = ghost.valid ? _ghostMatValid : _ghostMatInvalid;
     const isSquare = Geometry.getPieceFamily(ghost.type) === 'square-family';
-    const geo      = isSquare ? _squareGeo : _triangleGeo;
+    let geo;
+    if (!isSquare) {
+      geo = _triangleGeo;
+    } else if (ghost.type === 'square') {
+      geo = _squareGeo;
+    } else {
+      geo = _makeInclineGeo(ghost.type);
+    }
     const mesh     = new THREE.Mesh(geo, mat);
 
     if (isSquare) {
@@ -983,6 +1048,7 @@
       );
     }
     mesh.rotation.y = _rotIndexToRad(ghost.rotationIndex ?? 0);
+    _addDecalLines(mesh, ghost.type);
     _ghostGroup.add(mesh);
   }
 
