@@ -1,19 +1,19 @@
 /* scene.js — Three.js scene, orbit camera, raycasting, compass HUD. */
+/* v2 — renders from pieces Map; squares + triangles (Step 5).        */
 (function () {
 
   let _renderer, _scene, _camera, _controls;
-  let _groundGroup, _cubeGroup, _inclineGroup, _ghostGroup;
+  let _groundGroup, _pieceGroup, _ghostGroup;
   let _groundPlane;
-  let _cubeGeo, _edgeGeo, _edgeMat, _selEdgeMat;
-  let _incGeos = {}, _incEdgeGeos = {};
+  let _squareGeo, _squareEdgeGeo, _triangleGeo, _triangleEdgeGeo, _edgeMat, _selEdgeMat;
   let _ghostMatValid, _ghostMatInvalid;
   let _dirty = false;
   let _hoverHit = null;
-  let _mgOrigin = null;  // { x, z } integer grid cell under cursor for multi-ghost
   let _ctrlModified = false;  // true when Ctrl is held alongside another modifier
 
-  const _INCLINE_TYPES = new Set(['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top', 'half-wedge', 'half-wedge-block', 'half-wedge-inverted', 'half-wedge-block-inverted']);
-  const _DIR_ROT = { N: 0, E: -Math.PI / 2, S: Math.PI, W: Math.PI / 2 };
+  // Rotation index → Y-axis angle (radians). 0–11 → 0°, 30°, 60°, …, 330°.
+  function _rotIndexToRad(idx) { return (idx ?? 0) * (Math.PI / 6); }
+
   const _keys = new Set();
 
   // ── Init ───────────────────────────────────────────────────────
@@ -51,13 +51,11 @@
     sun.position.set(10, 20, 10);
     _scene.add(sun);
 
-    _groundGroup  = new THREE.Group();
-    _cubeGroup    = new THREE.Group();
-    _inclineGroup = new THREE.Group();
-    _ghostGroup   = new THREE.Group();
+    _groundGroup = new THREE.Group();
+    _pieceGroup  = new THREE.Group();
+    _ghostGroup  = new THREE.Group();
     _scene.add(_groundGroup);
-    _scene.add(_cubeGroup);
-    _scene.add(_inclineGroup);
+    _scene.add(_pieceGroup);
     _scene.add(_ghostGroup);
 
     const planeGeo = new THREE.PlaneGeometry(2000, 2000);
@@ -67,27 +65,14 @@
     _groundPlane.userData.isGround = true;
     _scene.add(_groundPlane);
 
-    _cubeGeo      = new THREE.BoxGeometry(1, 1, 1);
-    _edgeGeo      = new THREE.EdgesGeometry(_cubeGeo);
-    _edgeMat      = new THREE.LineBasicMaterial({ color: 0x000000 });
-    _selEdgeMat   = new THREE.LineBasicMaterial({ color: 0xf0c040 });
+    _squareGeo     = new THREE.BoxGeometry(1, 1, 1);
+    _squareEdgeGeo = new THREE.EdgesGeometry(_squareGeo);
+    _triangleGeo   = _makeTriangleGeo();
+    _triangleEdgeGeo = new THREE.EdgesGeometry(_triangleGeo);
+    _edgeMat       = new THREE.LineBasicMaterial({ color: 0x000000 });
+    _selEdgeMat    = new THREE.LineBasicMaterial({ color: 0xf0c040 });
     _ghostMatValid   = new THREE.MeshLambertMaterial({ color: 0x33ff66, transparent: true, opacity: 0.38, side: THREE.DoubleSide });
     _ghostMatInvalid = new THREE.MeshLambertMaterial({ color: 0xff3333, transparent: true, opacity: 0.38, side: THREE.DoubleSide });
-
-    _INCLINE_TYPES.forEach(type => {
-      _incGeos[type]     = _makeInclineGeo(type);
-      _incEdgeGeos[type] = new THREE.EdgesGeometry(_incGeos[type]);
-    });
-    const _boxGeo = new THREE.BoxGeometry(1, 1, 1);
-    _incGeos['cube-doorway']      = _boxGeo;
-    _incGeos['cube-window']       = _boxGeo;
-    _incGeos['pentashield-side']  = _boxGeo;
-    _incGeos['pentashield-top']   = _boxGeo;
-    _incEdgeGeos['cube-doorway']     = new THREE.EdgesGeometry(_boxGeo);
-    _incEdgeGeos['cube-window']      = new THREE.EdgesGeometry(_boxGeo);
-    _incEdgeGeos['pentashield-side'] = new THREE.EdgesGeometry(_boxGeo);
-    _incEdgeGeos['pentashield-top']  = new THREE.EdgesGeometry(_boxGeo);
-    // half-wedge types use custom geometry from _makeInclineGeo — already built above in forEach
 
     document.addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -156,8 +141,7 @@
     _controls.update();
     if (_dirty) {
       _rebuildGround();
-      _rebuildCubes();
-      _rebuildInclines();
+      _rebuildPieces();
       _rebuildGhost();
       _renderer.render(_scene, _camera);
       _renderCompass();
@@ -197,27 +181,99 @@
     addLines(majorPts, 0x2d4060);
   }
 
-  // ── Cube meshes ────────────────────────────────────────────────
-  function _rebuildCubes() {
-    _cubeGroup.traverse(obj => { if (obj.isMesh && obj.material) obj.material.dispose(); });
-    _cubeGroup.clear();
+  // ── Triangle prism geometry ──────────────────────────────────────
+  // Equilateral triangle prism, side 1, height 1.
+  // Matches the TRIANGLE_FACES descriptors in geometry.js:
+  //   Apex A = (0, y, TRI_APEX_Z)   approx (0, y, +0.5774)  south
+  //   NE   B = (0.5, y, TRI_BASE_Z) approx (0.5, y, -0.2887) north-east
+  //   NW   C = (-0.5, y, TRI_BASE_Z) approx (-0.5, y, -0.2887) north-west
+  // At rotation index 0 the attachment edge (BC, long north side) faces -z.
+  // Piece occupies y: 0 -> 1 (bottom at 0, top at 1).
+  function _makeTriangleGeo() {
+    const SQRT3_2 = Math.sqrt(3) / 2;
+    const TRI_APEX_Z =  (SQRT3_2 * 2 / 3);  // approx +0.5774 (south, apex)
+    const TRI_BASE_Z = -(SQRT3_2 / 3);       // approx -0.2887 (north, attachment edge)
 
-    App.state.cells.forEach((cell, key) => {
-      if (cell.object !== 'cube') return;
-      const [x, y, z] = key.split(',').map(Number);
-      const selected = App.state.selection.has(key);
-      const mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(App.getColorHex(cell.colorId)), polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
-      const mesh = new THREE.Mesh(_cubeGeo, mat);
-      mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
-      mesh.userData.key    = key;
-      mesh.userData.isCube = true;
-      mesh.add(new THREE.LineSegments(_edgeGeo, selected ? _selEdgeMat : _edgeMat));
-      _cubeGroup.add(mesh);
+    // Vertices: bottom ring (y=0), top ring (y=1)
+    const A0 = [  0,       0, TRI_APEX_Z ];
+    const B0 = [  0.5,     0, TRI_BASE_Z ];
+    const C0 = [ -0.5,     0, TRI_BASE_Z ];
+    const A1 = [  0,       1, TRI_APEX_Z ];
+    const B1 = [  0.5,     1, TRI_BASE_Z ];
+    const C1 = [ -0.5,     1, TRI_BASE_Z ];
+
+    const pos = [];
+    function t(a, b, c) { pos.push(...a, ...b, ...c); }
+    function q(a, b, c, d) { pos.push(...a, ...b, ...c, ...a, ...c, ...d); }
+
+    // Bottom face (CCW from below, normal -y)
+    t(A0, C0, B0);
+    // Top face (CCW from above, normal +y)
+    t(A1, B1, C1);
+    // North face: between B and C (normal -z, attachment edge)
+    // Back face convention: top-left -> top-right -> bottom-right -> bottom-left from outside (-z)
+    q(C1, B1, B0, C0);
+    // Southwest face: between A and C (normal points SW)
+    q(A0, A1, C1, C0);
+    // Southeast face: between A and B (normal points SE)
+    q(B0, B1, A1, A0);
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  // ── Piece meshes (v2) ──────────────────────────────────────────
+  // Squares and triangles rendered at world position with Y-rotation
+  // derived from rotationIndex (0–11 → 0°–330° in 30° steps).
+  function _rebuildPieces() {
+    _pieceGroup.traverse(obj => { if (obj.isMesh && obj.material) obj.material.dispose(); });
+    _pieceGroup.clear();
+
+    App.state.pieces.forEach(piece => {
+      const isSquare   = piece.type === 'square';
+      const isTriangle = piece.type === 'triangle';
+      if (!isSquare && !isTriangle) return;
+
+      const selected = App.state.selection.has(piece.id);
+      const mat = new THREE.MeshLambertMaterial({
+        color: new THREE.Color(App.getColorHex(piece.colorId)),
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      });
+
+      const geo     = isSquare ? _squareGeo     : _triangleGeo;
+      const edgeGeo = isSquare ? _squareEdgeGeo : _triangleEdgeGeo;
+
+      const mesh = new THREE.Mesh(geo, mat);
+      // Square centre offset: +0.5 on all axes (BoxGeometry centred at origin).
+      // Triangle geometry has its bottom at y=0, so y offset = 0; XZ origin at
+      // centroid, so x/z offset = 0.
+      if (isSquare) {
+        mesh.position.set(
+          piece.position.x + 0.5,
+          piece.position.y + 0.5,
+          piece.position.z + 0.5,
+        );
+      } else {
+        mesh.position.set(
+          piece.position.x,
+          piece.position.y,
+          piece.position.z,
+        );
+      }
+      mesh.rotation.y = _rotIndexToRad(piece.rotationIndex);
+      mesh.userData.pieceId = piece.id;
+      mesh.userData.isPiece = true;
+      mesh.add(new THREE.LineSegments(edgeGeo, selected ? _selEdgeMat : _edgeMat));
+      _pieceGroup.add(mesh);
     });
   }
 
-  // ── Incline geometry builder ───────────────────────────────────
-  // All inclines oriented for N (slope rises toward -z). Rotation applied per-mesh.
+  // ── Incline geometry builder (v1 — retained for reference, unused in v2 Step 3) ──
+  // Will be removed or repurposed when triangle geometry is introduced in Step 5.
   function _makeInclineGeo(type) {
     const pos = [];
     function q(a,b,c,d){ pos.push(...a,...b,...c,...a,...c,...d); }
@@ -389,38 +445,6 @@
     return geo;
   }
 
-  // ── Incline meshes ─────────────────────────────────────────────
-  function _rebuildInclines() {
-    _inclineGroup.traverse(obj => { if (obj.isMesh && obj.material) obj.material.dispose(); });
-    _inclineGroup.clear();
-
-    App.state.cells.forEach((cell, key) => {
-      if (!_INCLINE_TYPES.has(cell.object)) return;
-      const [x, y, z] = key.split(',').map(Number);
-      const selected = App.state.selection.has(key);
-      const mat = new THREE.MeshLambertMaterial({
-        color: new THREE.Color(App.getColorHex(cell.colorId)),
-        side:  THREE.DoubleSide,
-        polygonOffset: true,
-        polygonOffsetFactor: 1,
-        polygonOffsetUnits: 1,
-      });
-      const mesh = new THREE.Mesh(_incGeos[cell.object], mat);
-      mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
-      mesh.rotation.y         = _DIR_ROT[cell.direction] ?? 0;
-      mesh.userData.key       = key;
-      mesh.userData.isIncline = true;
-      mesh.add(new THREE.LineSegments(_incEdgeGeos[cell.object], selected ? _selEdgeMat : _edgeMat));
-      if (cell.object === 'cube-doorway' || cell.object === 'cube-window' ||
-          cell.object === 'pentashield-side' || cell.object === 'pentashield-top') {
-        _addDecalLines(mesh, cell.object);
-      }
-      // half-wedge types: mesh position is cell-centre but geometry occupies only half the cell height;
-      // no offset needed — geometry vertices already encode the correct y range.
-      _inclineGroup.add(mesh);
-    });
-  }
-
   // ── Decal lines — doorway arch / window rect on local south face (z=+0.5) ──
   // Attached as a child of the mesh; mesh rotation already handles direction.
   function _addDecalLines(mesh, type) {
@@ -500,12 +524,14 @@
     mesh.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x000000 })));
   }
 
-  // ── Raycasting ─────────────────────────────────────────────────
+  // ── Raycasting (v2 — Step 4 will rework placement semantics) ───
   /*
    * Returns null on miss.
-   * On hit: { type, key, normal, targetKey, buildTarget }
-   *   targetKey:   always the cell where build would land (occupied or not)
-   *   buildTarget: targetKey if cell is empty, null if occupied
+   * On piece hit: { type: 'piece', pieceId, faceNormal, hitPoint }
+   * On ground hit: { type: 'ground', hitPoint, gridX, gridZ }
+   *
+   * NOTE: buildTarget / targetKey logic removed — Step 4 will handle
+   * face-attachment placement using the connection graph.
    */
   function pickAt(screenX, screenY) {
     if (!_renderer || !_camera) return null;
@@ -519,36 +545,12 @@
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, _camera);
 
-    const solidHits = ray.intersectObjects([..._cubeGroup.children, ..._inclineGroup.children], false);
+    const solidHits = ray.intersectObjects(_pieceGroup.children, false);
     if (solidHits.length > 0) {
-      const hit  = solidHits[0];
-      const key  = hit.object.userData.key;
-      const [x, y, z] = key.split(',').map(Number);
-      const type = hit.object.userData.isIncline ? 'incline' : 'cube';
-      const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).round();
-      // Diagonal faces (slope/corner types) can produce a rounded normal with magnitude > 1
-      // (two axes both round to ±1), or the dominant-axis of the normal can disagree with
-      // which face the cursor is actually nearest to.  Use the hit point's offset from the
-      // cell centre as the ground truth: whichever axis shows the largest absolute deviation
-      // from the cell centre is the face that was hit, and its sign gives the direction.
-      let tx, ty, tz;
-      if (Math.abs(normal.x) + Math.abs(normal.y) + Math.abs(normal.z) > 1) {
-        const cellCx = x + 0.5, cellCy = y + 0.5, cellCz = z + 0.5;
-        const dx = hit.point.x - cellCx;
-        const dy = hit.point.y - cellCy;
-        const dz = hit.point.z - cellCz;
-        const ax = Math.abs(dx), ay = Math.abs(dy), az = Math.abs(dz);
-        if (ax >= ay && ax >= az)      { tx = x + Math.sign(dx); ty = y; tz = z; }
-        else if (az >= ax && az >= ay) { tx = x; ty = y; tz = z + Math.sign(dz); }
-        else                           { tx = x; ty = y + Math.sign(dy); tz = z; }
-      } else {
-        tx = x + Math.round(normal.x);
-        ty = y + Math.round(normal.y);
-        tz = z + Math.round(normal.z);
-      }
-      const targetKey   = `${tx},${ty},${tz}`;
-      const buildTarget = App.state.cells.has(targetKey) ? null : targetKey;
-      return { type, key, normal, targetKey, buildTarget };
+      const hit    = solidHits[0];
+      const pieceId = hit.object.userData.pieceId;
+      const normal  = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).round();
+      return { type: 'piece', pieceId, faceNormal: normal, hitPoint: hit.point.clone() };
     }
 
     const groundHits = ray.intersectObject(_groundPlane);
@@ -559,85 +561,367 @@
       const bx = Math.floor(gx / 10);
       const bz = Math.floor(gz / 10);
       if (!App.state.building.some(b => b.bx === bx && b.bz === bz)) return null;
-      const targetKey   = `${gx},0,${gz}`;
-      const buildTarget = App.state.cells.has(targetKey) ? null : targetKey;
-      return { type: 'ground', key: null, normal: new THREE.Vector3(0, 1, 0), targetKey, buildTarget };
+      return { type: 'ground', hitPoint: pt.clone(), gridX: gx, gridZ: gz };
     }
 
     return null;
   }
 
-  // ── Placement ghost ────────────────────────────────────────────
+  // ── Ghost validity checks ─────────────────────────────────────
+  /*
+   * Returns true if the proposed square piece lies entirely within the
+   * union of landclaim squares.  AABB corner test.
+   */
+  function _ghostInFootprintSquare(position) {
+    const x0 = position.x;
+    const z0 = position.z;
+    const building = App.state.building;
+    const corners = [
+      [x0,        z0       ],
+      [x0 + 0.99, z0       ],
+      [x0,        z0 + 0.99],
+      [x0 + 0.99, z0 + 0.99],
+    ];
+    return corners.every(([cx, cz]) => {
+      const bx = Math.floor(cx / 10);
+      const bz = Math.floor(cz / 10);
+      return building.some(b => b.bx === bx && b.bz === bz);
+    });
+  }
+
+  /*
+   * Returns true if the proposed triangle piece lies within the union of
+   * landclaim squares.  Polygon-in-union test: all three base vertices
+   * must fall inside some landclaim block.
+   */
+  function _ghostInFootprintTriangle(position, rotationIndex) {
+    const SQRT3_2   = Math.sqrt(3) / 2;
+    const TRI_APEX_Z =  (SQRT3_2 * 2 / 3);  // approx +0.5774 (south, apex)
+    const TRI_BASE_Z = -(SQRT3_2 / 3);       // approx -0.2887 (north, attachment edge)
+    // Local vertices in XZ
+    const localVerts = [
+      { x:  0,    z: TRI_APEX_Z },
+      { x:  0.5,  z: TRI_BASE_Z },
+      { x: -0.5,  z: TRI_BASE_Z },
+    ];
+    const G = Geometry;
+    const m = G.rotationMatrix(rotationIndex);
+    const building = App.state.building;
+    const EPS = 0.001;
+    return localVerts.every(lv => {
+      const rotated = G.Vec3.applyMat3({ x: lv.x, y: 0, z: lv.z }, m);
+      const wx = position.x + rotated.x;
+      const wz = position.z + rotated.z;
+      // Use epsilon-tolerant landclaim test to avoid rejecting vertices that
+      // land exactly on an east/south edge due to floating-point rounding.
+      return building.some(b => {
+        const x0 = b.bx * 10;
+        const z0 = b.bz * 10;
+        return wx >= x0 - EPS && wx <= x0 + 10 + EPS
+            && wz >= z0 - EPS && wz <= z0 + 10 + EPS;
+      });
+    });
+  }
+
+  function _ghostInFootprint(type, position, rotationIndex) {
+    if (type === 'triangle') return _ghostInFootprintTriangle(position, rotationIndex);
+    return _ghostInFootprintSquare(position);
+  }
+
+  /*
+   * Returns true if the proposed piece does NOT overlap any existing piece.
+   * Collision is position-equality on (x,y,z) — valid for both squares
+   * (integer-aligned) and triangles (float world positions).
+   * For triangles at non-integer rotations the positions are set by
+   * getAttachmentTransform and compared with === after rounding in _computeGhost.
+   */
+  function _ghostNoCollision(position) {
+    for (const piece of App.state.pieces.values()) {
+      if (Math.abs(piece.position.x - position.x) < 0.001 &&
+          Math.abs(piece.position.y - position.y) < 0.001 &&
+          Math.abs(piece.position.z - position.z) < 0.001) return false;
+    }
+    return true;
+  }
+
+  // ── Placement ghost (v2 — Step 5) ────────────────────────────
+  /*
+   * Placement contexts for triangles (spec § Geometry):
+   *
+   * CTX_FLAT  — ground hit, or top/bottom face of a non-triangle piece.
+   *             Q/E cycles 4 axis-aligned positions (N/E/S/W): attachment
+   *             edge flush against that cardinal edge of the target surface.
+   *             rotationIndex values: N=0, E=3, S=6, W=9.
+   *
+   * CTX_SIDE  — side face of any piece.  Attachment edge snaps flush to the
+   *             hovered face.  No Q/E cycling.
+   *
+   * CTX_TRI   — top or bottom face of a triangle piece.  Ghost inherits the
+   *             triangle's exact rotationIndex.  No Q/E cycling.
+   *
+   * In all contexts the triangle's attachment face (index
+   * TRIANGLE_ATTACHMENT_FACE_INDEX) is pinned as selfFaceIndex.
+   *
+   * _ghostRotationOffset — user Q/E delta, accumulated steps.
+   *   In CTX_FLAT it selects among the 4 cardinal slots (mod 4 × 3 steps).
+   *   In CTX_SIDE and CTX_TRI it is ignored.
+   */
+  let _ghostRotationOffset = 0; // accumulated Q/E steps
+  let _ghostContext = 'flat';   // 'flat' | 'side' | 'tri'
+
+  // Cardinal rotation indices for CTX_FLAT (N/E/S/W, 90° steps)
+  // E uses rotIndex 9 and W uses rotIndex 3 so the apex points inward (into
+  // the cell) and the attachment edge sits flush against the named wall.
+  const _FLAT_ROTS = [0, 9, 6, 3];
+
+  function _computeGhost(hit) {
+    if (!hit || App.state.tool !== 'build') { App.clearGhost(); _ghostRotationOffset = 0; return; }
+
+    const newType = App.state.selectedObject; // 'square' or 'triangle'
+    let ghostPos, attachToPieceId, attachFaceIndex, selfFaceIndex, rotationIndex;
+
+    if (hit.type === 'ground') {
+      // ── CTX_FLAT: ground ───────────────────────────────────────
+      _ghostContext = 'flat';
+      if (newType === 'square') {
+        ghostPos      = { x: hit.gridX, y: 0, z: hit.gridZ };
+        rotationIndex = 0;
+      } else {
+        // Triangle on ground: attachment edge flush to the cardinal edge of the
+        // target cell.  Rotate the attachment face localPosition (XZ only) by
+        // the cardinal rotationIndex and subtract from the target edge midpoint.
+        const slot    = ((_ghostRotationOffset % 4) + 4) % 4;
+        rotationIndex = _FLAT_ROTS[slot];
+        // Fix 3/6: compute ghost centroid position so the attachment edge sits
+        // flush against the corresponding cell edge.  The triangle centroid is
+        // |TRI_BASE_Z| ≈ 0.2887 inward from the attachment edge.
+        const TRI_INSET = Math.sqrt(3) / 6; // |TRI_BASE_Z|
+        const cx = hit.gridX + 0.5;
+        const cz = hit.gridZ + 0.5;
+        const edgeOffsets = [
+          { x: cx,                   z: hit.gridZ + TRI_INSET   }, // N: attachment edge at north wall (z=gridZ), centroid inward
+          { x: hit.gridX + 1 - TRI_INSET, z: cz               }, // E: attachment edge at east wall (x=gridX+1), centroid inward
+          { x: cx,                   z: hit.gridZ + 1 - TRI_INSET }, // S: attachment edge at south wall (z=gridZ+1), centroid inward
+          { x: hit.gridX + TRI_INSET, z: cz                    }, // W: attachment edge at west wall (x=gridX), centroid inward
+        ];
+        const off = edgeOffsets[slot];
+        ghostPos = { x: off.x, y: 0, z: off.z };
+      }
+      attachToPieceId = undefined;
+
+    } else if (hit.type === 'piece') {
+      const piece  = App.getPiece(hit.pieceId);
+      if (!piece) { App.clearGhost(); return; }
+
+      const G      = Geometry;
+      const facesA = G.getFaceDescriptors(piece.type);
+      // Square piece.position is the SW-bottom corner; face descriptors assume
+      // the XZ origin is the piece centroid, so offset by +0.5 on x and z.
+      // For non-triangle pieces (square and future types) the stored position is
+      // the SW-bottom corner; face descriptors are measured from the XZ centroid
+      // at half-height, so offset by +0.5 on all axes to get the correct origin.
+      // Triangle position IS the centroid (geometry.js uses that convention), so
+      // no offset is applied.
+      const pieceOrigin = piece.type === 'triangle'
+        ? piece.position
+        : { x: piece.position.x + 0.5, y: piece.position.y + 0.5, z: piece.position.z + 0.5 };
+      const T_A    = { position: pieceOrigin, rotationIndex: piece.rotationIndex };
+
+      // Find the face on piece A whose world normal best matches the hit face normal
+      let bestFaceA = null, bestDot = -Infinity;
+      facesA.forEach(fd => {
+        const wf  = G.faceDescInWorld(fd, T_A);
+        const dot = G.Vec3.dot(wf.worldNormal,
+          { x: hit.faceNormal.x, y: hit.faceNormal.y, z: hit.faceNormal.z });
+        if (dot > bestDot) { bestDot = dot; bestFaceA = fd; }
+      });
+      if (!bestFaceA) { App.clearGhost(); return; }
+
+      attachFaceIndex = bestFaceA.index;
+      attachToPieceId = piece.id;
+
+      // Determine placement context from the hit face
+      const isHorizFace = Math.abs(bestFaceA.outwardNormal.y) > 0.9;
+      const isTriPiece  = piece.type === 'triangle';
+
+      if (isTriPiece && isHorizFace) {
+        // ── CTX_TRI: top/bottom of a triangle piece ───────────────
+        _ghostContext  = 'tri';
+        rotationIndex  = piece.rotationIndex; // inherit exactly
+      } else if (isHorizFace) {
+        // ── CTX_FLAT: top/bottom of a non-triangle piece ──────────
+        _ghostContext = 'flat';
+        if (newType === 'square') {
+          // Square: use getAttachmentTransform normally
+          const facesB  = G.getFaceDescriptors(newType);
+          let bestFaceB = null, bestFaceBDot = -Infinity;
+          const fAWorld = G.faceDescInWorld(bestFaceA, T_A);
+          const reqN    = G.Vec3.scale(fAWorld.worldNormal, -1);
+          facesB.forEach(fd => {
+            for (let r = 0; r < 12; r++) {
+              const m = G.rotationMatrix(r);
+              const d = G.Vec3.dot(G.Vec3.applyMat3(fd.outwardNormal, m), reqN);
+              if (d > bestFaceBDot) { bestFaceBDot = d; bestFaceB = fd; }
+            }
+          });
+          if (!bestFaceB) { App.clearGhost(); return; }
+          selfFaceIndex = bestFaceB.index;
+          const T_B = G.getAttachmentTransform(T_A, bestFaceA, bestFaceB);
+          rotationIndex = T_B.rotationIndex;
+          // T_B.position is the centroid of the new square; ghost.position must
+          // be the SW-bottom corner (_rebuildGhost adds +0.5 to render at centroid).
+          ghostPos = {
+            x: Math.round((T_B.position.x - 0.5) * 1000) / 1000,
+            y: Math.round((T_B.position.y - 0.5) * 1000) / 1000,
+            z: Math.round((T_B.position.z - 0.5) * 1000) / 1000,
+          };
+        } else {
+          // Triangle on top/bottom face of non-triangle: cardinal rotation from offset
+          const slot    = ((_ghostRotationOffset % 4) + 4) % 4;
+          rotationIndex = _FLAT_ROTS[slot];
+          const attachFaceDesc = G.TRIANGLE_FACES[G.TRIANGLE_ATTACHMENT_FACE_INDEX];
+          selfFaceIndex = G.TRIANGLE_ATTACHMENT_FACE_INDEX;
+          // Override rotation with cardinal slot, recompute position from face centre.
+          // The attachment edge must sit flush against the cardinal edge of the top/
+          // bottom face, which is 0.5 units from the face centre in the attachment
+          // normal direction.  Shift the centroid by that 0.5 in XZ. (Fix 6)
+          const fAWorld  = G.faceDescInWorld(bestFaceA, T_A);
+          const mB       = G.rotationMatrix(rotationIndex);
+          const rotLocal = G.Vec3.applyMat3(attachFaceDesc.localPosition, mB);
+          const rotNorm  = G.Vec3.applyMat3(attachFaceDesc.outwardNormal,  mB);
+          ghostPos = {
+            x: Math.round((fAWorld.worldPosition.x - rotLocal.x + rotNorm.x * 0.5) * 1000) / 1000,
+            y: Math.round((fAWorld.worldPosition.y - rotLocal.y) * 1000) / 1000,
+            z: Math.round((fAWorld.worldPosition.z - rotLocal.z + rotNorm.z * 0.5) * 1000) / 1000,
+          };
+        }
+      } else {
+        // ── CTX_SIDE: side face of any piece ──────────────────────
+        _ghostContext = 'side';
+        if (newType !== 'triangle') {
+          const facesB  = G.getFaceDescriptors(newType);
+          let bestFaceB = null, bestFaceBDot = -Infinity;
+          const fAWorld = G.faceDescInWorld(bestFaceA, T_A);
+          const reqN    = G.Vec3.scale(fAWorld.worldNormal, -1);
+          facesB.forEach(fd => {
+            for (let r = 0; r < 12; r++) {
+              const m = G.rotationMatrix(r);
+              const d = G.Vec3.dot(G.Vec3.applyMat3(fd.outwardNormal, m), reqN);
+              if (d > bestFaceBDot) { bestFaceBDot = d; bestFaceB = fd; }
+            }
+          });
+          if (!bestFaceB) { App.clearGhost(); return; }
+          selfFaceIndex = bestFaceB.index;
+          const T_B = G.getAttachmentTransform(T_A, bestFaceA, bestFaceB);
+          rotationIndex = T_B.rotationIndex;
+          // T_B.position is the centroid of the new square (measured from piece
+          // origin conventions).  When piece A is a square its pieceOrigin has a
+          // +0.5 Y offset baked in, so T_B.position.y is already centroid Y and
+          // we subtract 0.5 to get the SW-bottom corner.  When piece A is a
+          // triangle (no Y offset) T_B.position.y is already the SW-bottom Y, so
+          // we add 0.5 back before subtracting — net zero change. (Fix 2)
+          const yOffsetB = piece.type === 'triangle' ? 0.5 : 0;
+          ghostPos = {
+            x: Math.round((T_B.position.x - 0.5) * 1000) / 1000,
+            y: Math.round((T_B.position.y - 0.5 + yOffsetB) * 1000) / 1000,
+            z: Math.round((T_B.position.z - 0.5) * 1000) / 1000,
+          };
+        } else {
+          // Triangle on side face: pin attachment face, use T_B.position directly.
+          // When piece A is a square its pieceOrigin inflates worldPosition.y by
+          // 0.5, so T_B.position.y is 0.5 too high — subtract it. (Fix 1)
+          const attachFaceDesc = G.TRIANGLE_FACES[G.TRIANGLE_ATTACHMENT_FACE_INDEX];
+          selfFaceIndex = G.TRIANGLE_ATTACHMENT_FACE_INDEX;
+          const T_B = G.getAttachmentTransform(T_A, bestFaceA, attachFaceDesc);
+          rotationIndex = T_B.rotationIndex;
+          const yFixTri = piece.type === 'square' ? 0.5 : 0;
+          ghostPos = {
+            x: Math.round(T_B.position.x * 1000) / 1000,
+            y: Math.round((T_B.position.y - yFixTri) * 1000) / 1000,
+            z: Math.round(T_B.position.z * 1000) / 1000,
+          };
+        }
+      }
+
+      // For CTX_TRI triangle: inherit existing triangle's position and rotationIndex
+      // directly — place flush above (y+1) or below (y-1) without going through
+      // getAttachmentTransform, which gives incorrect half-height results.
+      if (_ghostContext === 'tri' && newType === 'triangle') {
+        selfFaceIndex = G.TRIANGLE_ATTACHMENT_FACE_INDEX;
+        const isTop = bestFaceA.outwardNormal.y > 0;
+        ghostPos = {
+          x: piece.position.x,
+          y: piece.position.y + (isTop ? 1 : -1),
+          z: piece.position.z,
+        };
+        // rotationIndex already set to piece.rotationIndex above
+      }
+
+    } else {
+      App.clearGhost();
+      return;
+    }
+
+    if (!ghostPos) { App.clearGhost(); return; }
+
+    const valid = _ghostInFootprint(newType, ghostPos, rotationIndex ?? 0)
+               && _ghostNoCollision(ghostPos);
+    App.setGhost({
+      type: newType,
+      position: ghostPos,
+      rotationIndex: rotationIndex ?? 0,
+      valid,
+      attachToPieceId,
+      attachFaceIndex,
+      selfFaceIndex,
+    });
+  }
+
+  /*
+   * Cycle the ghost's rotation by dir (+1 or -1).
+   * Only active in CTX_FLAT (4 cardinal slots).  No-op in CTX_SIDE / CTX_TRI.
+   */
+  function cycleGhostRotation(dir) {
+    if (!_hoverHit) return;
+    if (_ghostContext !== 'flat') return;
+    _ghostRotationOffset = ((_ghostRotationOffset + dir) % 4 + 4) % 4;
+    _computeGhost(_hoverHit);
+    markDirty();
+  }
+
   function setHoverHit(hit) {
+    // Reset rotation offset when the hover target changes so the user
+    // starts fresh on each new face, but preserve it while hovering the same face.
+    if (!hit) _ghostRotationOffset = 0;
     _hoverHit = hit;
+    _computeGhost(hit);
     markDirty();
   }
 
   function _rebuildGhost() {
     _ghostGroup.clear();
+    const ghost = App.state.ghost;
+    if (!ghost || !App.state.showPlacementGhost) return;
 
-    // ── Multi-ghost ────────────────────────────────────────────────
-    const mg = App.state.placingMultiGhost;
-    if (mg && _mgOrigin) {
-      const targets = App.getMultiGhostTargets(_mgOrigin.x, _mgOrigin.z);
-      const valid   = App.multiGhostValid(_mgOrigin.x, _mgOrigin.z);
-      const mat     = valid ? _ghostMatValid : _ghostMatInvalid;
-      if (targets) {
-        targets.forEach(({ key, cell }) => {
-          const [x, y, z] = key.split(',').map(Number);
-          let mesh;
-          if (cell.object === 'cube') {
-            mesh = new THREE.Mesh(_cubeGeo, mat);
-          } else if (_INCLINE_TYPES.has(cell.object)) {
-            mesh = new THREE.Mesh(_incGeos[cell.object], mat);
-            mesh.rotation.y = _DIR_ROT[cell.direction] ?? 0;
-            if (cell.object === 'cube-doorway' || cell.object === 'cube-window' ||
-                cell.object === 'pentashield-side' || cell.object === 'pentashield-top') {
-              _addDecalLines(mesh, cell.object);
-            }
-            // half-wedge types need no decal lines
-          } else {
-            return;
-          }
-          mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
-          _ghostGroup.add(mesh);
-        });
-      }
-      return;
-    }
+    const mat      = ghost.valid ? _ghostMatValid : _ghostMatInvalid;
+    const isSquare = ghost.type !== 'triangle';
+    const geo      = isSquare ? _squareGeo : _triangleGeo;
+    const mesh     = new THREE.Mesh(geo, mat);
 
-    // ── Single placement ghost ──────────────────────────────────────
-    if (!App.state.showPlacementGhost) return;
-    if (App.state.tool !== 'build') return;
-    if (!_hoverHit) return;
-
-    const targetKey = _hoverHit.targetKey;
-    if (!targetKey) return;
-    const valid = !App.state.cells.has(targetKey);
-    const [x, y, z] = targetKey.split(',').map(Number);
-    const bx = Math.floor(x / 10);
-    const bz = Math.floor(z / 10);
-    const inFP = App.state.building.some(b => b.bx === bx && b.bz === bz);
-
-    const obj = App.state.selectedObject;
-    const mat = (valid && inFP) ? _ghostMatValid : _ghostMatInvalid;
-    let mesh;
-
-    if (obj === 'cube') {
-      mesh = new THREE.Mesh(_cubeGeo, mat);
-    } else if (_INCLINE_TYPES.has(obj)) {
-      mesh = new THREE.Mesh(_incGeos[obj], mat);
-      mesh.rotation.y = _DIR_ROT[App.state.placeDirection] ?? 0;
-      if (obj === 'cube-doorway' || obj === 'cube-window' ||
-          obj === 'pentashield-side' || obj === 'pentashield-top') {
-        _addDecalLines(mesh, obj);
-      }
-      // half-wedge types need no decal lines
+    if (isSquare) {
+      mesh.position.set(
+        ghost.position.x + 0.5,
+        ghost.position.y + 0.5,
+        ghost.position.z + 0.5,
+      );
     } else {
-      return;
+      mesh.position.set(
+        ghost.position.x,
+        ghost.position.y,
+        ghost.position.z,
+      );
     }
-
-    mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+    mesh.rotation.y = _rotIndexToRad(ghost.rotationIndex ?? 0);
     _ghostGroup.add(mesh);
   }
 
@@ -697,11 +981,11 @@
     });
   }
 
-  // ── Area select — project all cells to screen, return keys within rect ──
+  // ── Area select — project all pieces to screen, return ids within rect ──
   /*
    * screenX1/Y1, screenX2/Y2 are client-space corners (order doesn't matter).
-   * Returns an array of cell keys whose centre projects within the rectangle.
-   * Occlusion is intentionally ignored — we project world→NDC→screen only.
+   * Returns an array of piece ids whose centre projects within the rectangle.
+   * Occlusion is intentionally ignored — world→NDC→screen projection only.
    */
   function selectInScreenRect(screenX1, screenY1, screenX2, screenY2) {
     if (!_renderer || !_camera) return [];
@@ -715,14 +999,13 @@
     const result = [];
     const v = new THREE.Vector3();
 
-    App.state.cells.forEach((_cell, key) => {
-      const [x, y, z] = key.split(',').map(Number);
-      v.set(x + 0.5, y + 0.5, z + 0.5);
+    App.state.pieces.forEach(piece => {
+      v.set(piece.position.x + 0.5, piece.position.y + 0.5, piece.position.z + 0.5);
       v.project(_camera);
       const sx = (v.x * 0.5 + 0.5) * rect.width  + rect.left;
       const sy = (-v.y * 0.5 + 0.5) * rect.height + rect.top;
       if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) {
-        result.push(key);
+        result.push(piece.id);
       }
     });
 
@@ -734,11 +1017,6 @@
     if (!_renderer) return null;
     _renderer.render(_scene, _camera);
     return _renderer.domElement.toDataURL('image/jpeg', 0.6);
-  }
-
-  function setMultiGhostOrigin(x, z) {
-    _mgOrigin = (x === null) ? null : { x, z };
-    markDirty();
   }
 
   function applySettings(settings) {
@@ -755,6 +1033,6 @@
     _controls.mouseButtons.LEFT = active ? THREE.MOUSE.NONE : THREE.MOUSE.PAN;
   }
 
-  window.Scene = { init, markDirty, pickAt, setHoverHit, setMultiGhostOrigin, getSnapshot, selectInScreenRect, applySettings, setAreaSelectMode };
+  window.Scene = { init, markDirty, pickAt, setHoverHit, cycleGhostRotation, getSnapshot, selectInScreenRect, applySettings, setAreaSelectMode };
 
 }());

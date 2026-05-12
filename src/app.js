@@ -1,4 +1,5 @@
 /* app.js — state, mutations, Supabase persistence, init. */
+/* v2 — pieces + connections graph replaces cells Map.      */
 (function () {
 
   const SUPABASE_URL = 'https://ekrlymbgjduczogvskox.supabase.co';
@@ -15,25 +16,28 @@
     { id: 7, hex: '#bdc3c7' },
   ];
 
-  let _nextColorId   = DEFAULT_COLOURS.length;
+  let _nextColorId  = DEFAULT_COLOURS.length;
+  let _nextPieceId  = 0;
   let _autosaveTimer = null;
 
   const state = {
     // persisted
-    building:        [{ bx: 0, bz: 0 }],
-    cells:           new Map(),
-    colors:          DEFAULT_COLOURS.map(c => ({ ...c })),
-    project:         null,   // { id, name, isNamed }
+    building:    [{ bx: 0, bz: 0 }],
+    pieces:      new Map(),   // Map<pieceId, { id, type, position:{x,y,z}, rotationIndex, colorId }>
+    connections: new Map(),   // Map<pieceId, Array<{ faceIndex, connectedPieceId, connectedFaceIndex }>>
+    colors:      DEFAULT_COLOURS.map(c => ({ ...c })),
+    project:     null,        // { id, name, isNamed }
 
     // editor-only
     tool:               'build',
-    selectedObject:     'cube',
-    placeDirection:     'N',
+    selectedObject:     'square',
     selectedColorId:    0,
     selection:          new Set(),
     showPlacementGhost: true,
-    placingMultiGhost:  null,   // null | { cells, anchorIdx, rotation, pickUpKeys }
-    stamps:             [],     // local cache of Supabase stamps table
+    ghost:              null,
+    xray:               false,
+    placingStamp:       null,
+    stamps:             [],   // local cache of Supabase stamps table
   };
 
   // Supabase client
@@ -52,10 +56,21 @@
   function _serialize() {
     return {
       building: state.building,
-      cells: [...state.cells.entries()].map(([key, cell]) => {
-        const [x, y, z] = key.split(',').map(Number);
-        return { x, y, z, object: cell.object, direction: cell.direction, colorId: cell.colorId };
-      }),
+      pieces: [...state.pieces.values()].map(p => ({
+        id:            p.id,
+        type:          p.type,
+        position:      { x: p.position.x, y: p.position.y, z: p.position.z },
+        rotationIndex: p.rotationIndex,
+        colorId:       p.colorId,
+      })),
+      connections: [...state.connections.entries()].map(([pieceId, edges]) => ({
+        pieceId,
+        edges: edges.map(e => ({
+          faceIndex:          e.faceIndex,
+          connectedPieceId:   e.connectedPieceId,
+          connectedFaceIndex: e.connectedFaceIndex,
+        })),
+      })),
       colors: state.colors,
     };
   }
@@ -63,20 +78,42 @@
   function _deserialize(data) {
     if (!data) return;
     state.building = (data.building && data.building.length > 0) ? data.building : [{ bx: 0, bz: 0 }];
-    state.cells    = new Map();
-    (data.cells || []).forEach(({ x, y, z, object, direction, colorId }) => {
-      if (!['cube', 'stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top', 'half-wedge', 'half-wedge-block', 'half-wedge-inverted', 'half-wedge-block-inverted'].includes(object)) return;
-      state.cells.set(`${x},${y},${z}`, { object, direction, colorId });
+
+    state.pieces = new Map();
+    (data.pieces || []).forEach(p => {
+      if (!['square', 'triangle'].includes(p.type)) return;
+      state.pieces.set(p.id, {
+        id:            p.id,
+        type:          p.type,
+        position:      { x: p.position.x, y: p.position.y, z: p.position.z },
+        rotationIndex: p.rotationIndex,
+        colorId:       p.colorId,
+      });
     });
-    state.colors  = data.colors || DEFAULT_COLOURS.map(c => ({ ...c }));
-    _nextColorId  = state.colors.reduce((m, c) => Math.max(m, c.id), -1) + 1;
-    state.selectedColorId = state.colors[0]?.id ?? 0;
-    state.selection       = new Set();
+
+    state.connections = new Map();
+    (data.connections || []).forEach(({ pieceId, edges }) => {
+      if (!state.pieces.has(pieceId)) return;
+      state.connections.set(pieceId, (edges || []).filter(e =>
+        state.pieces.has(e.connectedPieceId)
+      ).map(e => ({
+        faceIndex:          e.faceIndex,
+        connectedPieceId:   e.connectedPieceId,
+        connectedFaceIndex: e.connectedFaceIndex,
+      })));
+    });
+
+    state.colors             = data.colors || DEFAULT_COLOURS.map(c => ({ ...c }));
+    _nextColorId             = state.colors.reduce((m, c) => Math.max(m, c.id), -1) + 1;
+    _nextPieceId             = (data.pieces || []).reduce((m, p) => Math.max(m, p.id), -1) + 1;
+    state.selectedColorId    = state.colors[0]?.id ?? 0;
+    state.selection          = new Set();
     state.tool               = 'build';
-    state.selectedObject     = 'cube';
-    state.placeDirection     = 'N';
+    state.selectedObject     = 'square';
     state.showPlacementGhost = true;
-    state.placingMultiGhost  = null;
+    state.ghost              = null;
+    state.xray               = false;
+    state.placingStamp       = null;
   }
 
   // ── Tool / object / colour ─────────────────────────────────────
@@ -92,17 +129,6 @@
     _refreshUI();
   }
 
-  const _DIRS = ['N', 'E', 'S', 'W'];
-  function setPlaceDirection(dir) {
-    state.placeDirection = dir;
-    _refreshUI();
-  }
-  function rotatePlaceDirection(delta) {
-    const i = _DIRS.indexOf(state.placeDirection);
-    state.placeDirection = _DIRS[(i + delta + 4) % 4];
-    _refreshUI();
-  }
-
   function setColor(id) {
     state.selectedColorId = id;
     _refreshUI();
@@ -113,7 +139,7 @@
     _refreshUI();
   }
 
-  // ── Colour management ──────────────────────────────────────────
+  // ── Colour management -------------------
   function addColor(hex) {
     const id = _nextColorId++;
     state.colors.push({ id, hex });
@@ -134,7 +160,7 @@
     const idx = state.colors.findIndex(c => c.id === id);
     if (idx === -1) return;
     state.colors.splice(idx, 1);
-    state.cells.forEach(cell => { if (cell.colorId === id) cell.colorId = 0; });
+    state.pieces.forEach(piece => { if (piece.colorId === id) piece.colorId = 0; });
     if (state.selectedColorId === id) state.selectedColorId = 0;
     _markDirty();
     _refreshUI();
@@ -145,52 +171,79 @@
     return colour ? colour.hex : state.colors[0].hex;
   }
 
-  // ── Cell placement ─────────────────────────────────────────────
-  function placeCell(x, y, z) {
-    const key = `${x},${y},${z}`;
-    if (state.cells.has(key)) return false;
-    if (!_inFootprint(x, z)) return false;
-    const isIncline = ['stair-solid', 'wedge-solid', 'wedge-solid-inverted', 'corner-wedge', 'corner-wedge-inverted', 'cube-doorway', 'cube-window', 'pentashield-side', 'pentashield-top', 'half-wedge', 'half-wedge-block', 'half-wedge-inverted', 'half-wedge-block-inverted'].includes(state.selectedObject);
-    state.cells.set(key, {
-      object:    state.selectedObject,
-      direction: isIncline ? state.placeDirection : null,
-      colorId:   state.selectedColorId,
+  // ── Cell placement ---------------------------
+  // ── Piece mutations ────────────────────────────────────────────
+  /*
+   * placePiece({ type, position, rotationIndex, colorId?,
+   *              attachToPieceId?, attachFaceIndex?, selfFaceIndex? })
+   *
+   * Inserts a new piece and, if attachment params are supplied, records
+   * the bidirectional connection. Returns the new piece's id, or null if
+   * the attachment target is unknown.
+   */
+  function placePiece({ type, position, rotationIndex, colorId, attachToPieceId, attachFaceIndex, selfFaceIndex }) {
+    if (attachToPieceId !== undefined && !state.pieces.has(attachToPieceId)) return null;
+
+    const id = _nextPieceId++;
+    state.pieces.set(id, {
+      id,
+      type,
+      position: { x: position.x, y: position.y, z: position.z },
+      rotationIndex: rotationIndex ?? 0,
+      colorId: colorId ?? state.selectedColorId,
     });
+
+    if (attachToPieceId !== undefined && attachFaceIndex !== undefined && selfFaceIndex !== undefined) {
+      if (!state.connections.has(id)) state.connections.set(id, []);
+      state.connections.get(id).push({
+        faceIndex:          selfFaceIndex,
+        connectedPieceId:   attachToPieceId,
+        connectedFaceIndex: attachFaceIndex,
+      });
+      if (!state.connections.has(attachToPieceId)) state.connections.set(attachToPieceId, []);
+      state.connections.get(attachToPieceId).push({
+        faceIndex:          attachFaceIndex,
+        connectedPieceId:   id,
+        connectedFaceIndex: selfFaceIndex,
+      });
+    }
+
+    _markDirty();
+    return id;
+  }
+
+  /*
+   * deletePiece(id)
+   *
+   * Removes the piece and all edges that reference it. Orphaned neighbours
+   * stay in place — their other connections are preserved.
+   */
+  function deletePiece(id) {
+    if (!state.pieces.has(id)) return false;
+    const edges = state.connections.get(id) || [];
+    edges.forEach(({ connectedPieceId }) => {
+      const nb = state.connections.get(connectedPieceId);
+      if (!nb) return;
+      const filtered = nb.filter(e => e.connectedPieceId !== id);
+      if (filtered.length) state.connections.set(connectedPieceId, filtered);
+      else state.connections.delete(connectedPieceId);
+    });
+    state.connections.delete(id);
+    state.pieces.delete(id);
+    state.selection.delete(id);
     _markDirty();
     return true;
   }
 
-  function deleteCell(x, y, z) {
-    const key = `${x},${y},${z}`;
-    if (!state.cells.has(key)) return false;
-    state.cells.delete(key);
-    state.selection.delete(key);
-    _markDirty();
-    return true;
-  }
+  /* getPiece(id) → piece | undefined */
+  function getPiece(id) { return state.pieces.get(id); }
 
   // ── Selection ──────────────────────────────────────────────────
   function _markSceneDirty() { if (window.Scene) window.Scene.markDirty(); _refreshUI(); }
 
-  function addToSelection(key)      { state.selection.add(key);    _markSceneDirty(); }
-  function removeFromSelection(key) { state.selection.delete(key); _markSceneDirty(); }
-  function clearSelection()         { if (state.selection.size) { state.selection.clear(); _markSceneDirty(); } }
-
-  function deleteSelection() {
-    state.selection.forEach(key => state.cells.delete(key));
-    state.selection.clear();
-    _markDirty();
-    _refreshUI();
-  }
-
-  function repaintCells(keys, colorId) {
-    keys.forEach(key => {
-      const cell = state.cells.get(key);
-      if (cell) cell.colorId = colorId;
-    });
-    _markDirty();
-    _refreshUI();
-  }
+  function addToSelection(id)      { state.selection.add(id);    _markSceneDirty(); }
+  function removeFromSelection(id) { state.selection.delete(id); _markSceneDirty(); }
+  function clearSelection()        { if (state.selection.size) { state.selection.clear(); _markSceneDirty(); } }
 
   // ── Footprint ──────────────────────────────────────────────────
   function _inFootprint(x, z) {
@@ -200,9 +253,9 @@
   }
 
   function _blockHasContent(bx, bz) {
-    for (const key of state.cells.keys()) {
-      const [cx, , cz] = key.split(',').map(Number);
-      if (Math.floor(cx / 10) === bx && Math.floor(cz / 10) === bz) return true;
+    for (const piece of state.pieces.values()) {
+      if (Math.floor(piece.position.x / 10) === bx &&
+          Math.floor(piece.position.z / 10) === bz) return true;
     }
     return false;
   }
@@ -248,11 +301,10 @@
     const hadContent = _blockHasContent(bx, bz);
     state.building.splice(idx, 1);
     if (hadContent) {
-      for (const key of [...state.cells.keys()]) {
-        const [cx, , cz] = key.split(',').map(Number);
-        if (Math.floor(cx / 10) === bx && Math.floor(cz / 10) === bz) {
-          state.cells.delete(key);
-          state.selection.delete(key);
+      for (const piece of [...state.pieces.values()]) {
+        if (Math.floor(piece.position.x / 10) === bx &&
+            Math.floor(piece.position.z / 10) === bz) {
+          deletePiece(piece.id);
         }
       }
     }
@@ -377,172 +429,15 @@
     return state.project?.isNamed === true;
   }
 
-  // ── Multi-ghost ────────────────────────────────────────────────
-  /*
-   * placingMultiGhost shape:
-   *   cells:      [{ dx, dy, dz, object, direction, colorId }]  offsets from normalised origin
-   *   anchorIdx:  0-3 — which bounding-box corner snaps to cursor
-   *   rotation:   0-3 (×90° CW around Y)
-   *   pickUpKeys: [{ key, cell }] snapshots to restore on ESC, or null for Duplicate
-   */
-  function startMultiGhost(pickUp) {
-    if (!state.selection.size) return;
-
-    const keys      = [...state.selection];
-    const snapshots = keys.map(k => ({ key: k, cell: { ...state.cells.get(k) } }));
-    const coords    = keys.map(k => k.split(',').map(Number));
-
-    const minX = Math.min(...coords.map(c => c[0]));
-    const minY = Math.min(...coords.map(c => c[1]));
-    const minZ = Math.min(...coords.map(c => c[2]));
-
-    const cells = keys.map((k, i) => {
-      const [x, y, z] = coords[i];
-      return { dx: x - minX, dy: y - minY, dz: z - minZ, ...state.cells.get(k) };
-    });
-
-    if (pickUp) {
-      keys.forEach(k => state.cells.delete(k));
-      state.selection.clear();
-      _markDirty();
-    } else {
-      state.selection.clear();
-    }
-
-    state.placingMultiGhost = {
-      cells,
-      anchorIdx:  0,
-      rotation:   0,
-      pickUpKeys: pickUp ? snapshots : null,
-    };
-    _refreshUI();
-  }
-
-  function cancelMultiGhost() {
-    if (!state.placingMultiGhost) return;
-    const { pickUpKeys } = state.placingMultiGhost;
-    state.placingMultiGhost = null;
-    if (pickUpKeys) {
-      pickUpKeys.forEach(({ key, cell }) => state.cells.set(key, cell));
-      _markDirty();
-    }
-    _refreshUI();
+  // ── Ghost (v2 placeholder — implemented in Step 3+) ───────────
+  function setGhost(ghost) {
+    state.ghost = ghost;
     if (window.Scene) window.Scene.markDirty();
   }
 
-  function commitMultiGhost(originX, originZ) {
-    const mg = state.placingMultiGhost;
-    if (!mg) return false;
-    const targets = _multiGhostTargets(mg, originX, originZ);
-    if (!targets) return false;
-    // Stamp: block placement if any target is occupied or out of footprint
-    if (mg.isStamp) {
-      const allClear = targets.every(({ key }) => {
-        if (state.cells.has(key)) return false;
-        const [x, , z] = key.split(',').map(Number);
-        return _inFootprint(x, z);
-      });
-      if (!allClear) return false;
-    }
-    const placedKeys = [];
-    targets.forEach(({ key, cell }) => {
-      if (state.cells.has(key)) return;
-      const [x, , z] = key.split(',').map(Number);
-      if (!_inFootprint(x, z)) return;
-      state.cells.set(key, cell);
-      placedKeys.push(key);
-    });
-    if (!placedKeys.length) return false;
-    state.placingMultiGhost = null;
-    state.selection = new Set(placedKeys);
-    _markDirty();
-    _refreshUI();
-    return true;
-  }
-
-  function rotateMultiGhost(delta) {
-    const mg = state.placingMultiGhost;
-    if (!mg) return;
-    mg.rotation = (mg.rotation + delta + 4) % 4;
+  function clearGhost() {
+    state.ghost = null;
     if (window.Scene) window.Scene.markDirty();
-  }
-
-  function shiftMultiGhostLevel(delta) {
-    const mg = state.placingMultiGhost;
-    if (!mg) return;
-    const minDY = Math.min(...mg.cells.map(c => c.dy));
-    if (delta < 0 && minDY + delta < 0) return;
-    mg.cells.forEach(c => { c.dy += delta; });
-    if (window.Scene) window.Scene.markDirty();
-  }
-
-  function cycleMultiGhostAnchor() {
-    const mg = state.placingMultiGhost;
-    if (!mg) return;
-    mg.anchorIdx = (mg.anchorIdx + 1) % 4;
-    if (window.Scene) window.Scene.markDirty();
-  }
-
-  /*
-   * Rotation: CW 90° per step around Y: (dx, dz) → (dz, -dx).
-   * Anchor corners (after rotation, XZ bounding box):
-   *   0 = (rxMin, rzMin)  1 = (rxMax, rzMin)
-   *   2 = (rxMax, rzMax)  3 = (rxMin, rzMax)
-   */
-  function _multiGhostTargets(mg, originX, originZ) {
-    if (!mg) return null;
-    const { cells, anchorIdx, rotation } = mg;
-
-    const rotated = cells.map(c => {
-      let dx = c.dx, dz = c.dz;
-      for (let r = 0; r < rotation; r++) { const t = dx; dx = dz; dz = -t; }
-      return { ...c, rdx: dx, rdz: dz };
-    });
-
-    const rxMin = Math.min(...rotated.map(c => c.rdx));
-    const rxMax = Math.max(...rotated.map(c => c.rdx));
-    const rzMin = Math.min(...rotated.map(c => c.rdz));
-    const rzMax = Math.max(...rotated.map(c => c.rdz));
-
-    const corners = [[rxMin, rzMin], [rxMax, rzMin], [rxMax, rzMax], [rxMin, rzMax]];
-    const [anchorDX, anchorDZ] = corners[anchorIdx];
-
-    const _DIR_CW = { N: 'W', W: 'S', S: 'E', E: 'N' };
-    return rotated.map(c => {
-      let dir = c.direction;
-      if (dir) {
-        for (let r = 0; r < rotation; r++) dir = _DIR_CW[dir];
-      }
-      return {
-        key:  `${originX + c.rdx - anchorDX},${c.dy},${originZ + c.rdz - anchorDZ}`,
-        cell: { object: c.object, direction: dir, colorId: c.colorId },
-      };
-    });
-  }
-
-  function multiGhostValid(originX, originZ) {
-    const mg = state.placingMultiGhost;
-    if (!mg) return false;
-    const targets = _multiGhostTargets(mg, originX, originZ);
-    if (!targets || !targets.length) return false;
-    if (mg.isStamp) {
-      // Stamp: red if any target cell is occupied or out of footprint
-      return targets.every(({ key }) => {
-        if (state.cells.has(key)) return false;
-        const [x, , z] = key.split(',').map(Number);
-        return _inFootprint(x, z);
-      });
-    }
-    // Multi-ghost: red only when every target cell is occupied
-    return targets.some(({ key }) => {
-      if (state.cells.has(key)) return false;
-      const [x, , z] = key.split(',').map(Number);
-      return _inFootprint(x, z);
-    });
-  }
-
-  function getMultiGhostTargets(originX, originZ) {
-    return _multiGhostTargets(state.placingMultiGhost, originX, originZ);
   }
 
   // ── Stamps ────────────────────────────────────────────────────────
@@ -565,25 +460,22 @@
   }
 
   async function saveStamp(name, overwrite) {
+    // v2 stamp format: subgraph of pieces + connections
     if (!state.selection.size) return;
-    const keys   = [...state.selection];
-    const coords = keys.map(k => k.split(',').map(Number));
-    const minX   = Math.min(...coords.map(c => c[0]));
-    const minY   = Math.min(...coords.map(c => c[1]));
-    const minZ   = Math.min(...coords.map(c => c[2]));
-    const cells  = keys.map((k, i) => {
-      const [x, y, z] = coords[i];
-      const cell = state.cells.get(k);
-      return { x: x - minX, y: y - minY, z: z - minZ,
-               object: cell.object, direction: cell.direction, colorId: cell.colorId };
-    });
+    const ids         = [...state.selection];
+    const idSet       = new Set(ids);
+    const pieces      = ids.map(id => ({ ...state.pieces.get(id) }));
+    const connections = ids.map(id => ({
+      pieceId: id,
+      edges: (state.connections.get(id) || []).filter(e => idSet.has(e.connectedPieceId)),
+    }));
     try {
       if (overwrite) {
         const existing = getStampByName(name);
         if (existing) {
           const { data, error } = await window._sb
             .from('stamps')
-            .update({ data: { cells }, updated_at: new Date().toISOString() })
+            .update({ data: { pieces, connections }, updated_at: new Date().toISOString() })
             .eq('id', existing.id)
             .select()
             .single();
@@ -596,7 +488,7 @@
       }
       const { data, error } = await window._sb
         .from('stamps')
-        .insert({ name, data: { cells } })
+        .insert({ name, data: { pieces, connections } })
         .select()
         .single();
       if (error) throw error;
@@ -608,26 +500,9 @@
   }
 
   function activateStampPlacement(stamp) {
-    if (!stamp || !stamp.data || !stamp.data.cells || !stamp.data.cells.length) return;
-    if (state.placingMultiGhost) {
-      const { pickUpKeys } = state.placingMultiGhost;
-      if (pickUpKeys) {
-        pickUpKeys.forEach(({ key, cell }) => state.cells.set(key, cell));
-        _markDirty();
-      }
-    }
-    state.selection.clear();
-    const cells = stamp.data.cells.map(c => ({
-      dx: c.x, dy: c.y, dz: c.z,
-      object: c.object, direction: c.direction, colorId: c.colorId,
-    }));
-    state.placingMultiGhost = {
-      cells,
-      anchorIdx:  0,
-      rotation:   0,
-      pickUpKeys: null,
-      isStamp:    true,
-    };
+    // v2 stub — full implementation in Step 9
+    if (!stamp) return;
+    state.placingStamp = stamp;
     _refreshUI();
   }
 
@@ -666,29 +541,32 @@
   // ── Init ───────────────────────────────────────────────────────
   function init() {
     state.building        = [{ bx: 0, bz: 0 }];
-    state.cells           = new Map();
+    state.pieces          = new Map();
+    state.connections     = new Map();
     state.colors          = DEFAULT_COLOURS.map(c => ({ ...c }));
     state.project         = null;
     state.tool            = 'build';
-    state.selectedObject  = 'cube';
-    state.placeDirection  = 'N';
+    state.selectedObject  = 'square';
     state.selectedColorId = 0;
     state.selection       = new Set();
-    state.placingMultiGhost = null;
+    state.showPlacementGhost = true;
+    state.ghost           = null;
+    state.xray            = false;
+    state.placingStamp    = null;
     state.stamps          = [];
     _nextColorId          = DEFAULT_COLOURS.length;
+    _nextPieceId          = 0;
     loadStamps();
   }
 
   // ── Public API ─────────────────────────────────────────────────
   window.App = {
     state,
-    setTool, setSelectedObject, setPlaceDirection, rotatePlaceDirection, setColor, setShowPlacementGhost,
+    setTool, setSelectedObject, setColor, setShowPlacementGhost,
     addColor, updateColor, deleteColor, getColorHex,
-    placeCell, deleteCell,
-    addToSelection, removeFromSelection, clearSelection, deleteSelection, repaintCells,
-    startMultiGhost, cancelMultiGhost, commitMultiGhost,
-    rotateMultiGhost, cycleMultiGhostAnchor, shiftMultiGhostLevel, multiGhostValid, getMultiGhostTargets,
+    placePiece, deletePiece, getPiece,
+    addToSelection, removeFromSelection, clearSelection,
+    setGhost, clearGhost,
     addBlock, removeBlock, blockHasContent, canRemoveBlock, footprintLabel,
     loadActiveProject, loadProject, createFirstProject,
     saveProject, saveProjectOverwrite, fetchNamedProjects, deleteProject, isCurrentProjectNamed,

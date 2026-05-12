@@ -94,47 +94,11 @@
     <section class="sidebar-section" id="section-objects">
       <h3 class="sidebar-heading">Objects</h3>
       <div class="object-grid">
-        <button class="btn-object active" id="obj-cube" data-object="cube">
-          <span class="object-label">Cube</span>
+        <button class="btn-object active" id="obj-square" data-object="square">
+          <span class="object-label">Square</span>
         </button>
-        <button class="btn-object" id="obj-stair-solid" data-object="stair-solid">
-          <span class="object-label">Stair</span>
-        </button>
-        <button class="btn-object" id="obj-wedge-solid" data-object="wedge-solid">
-          <span class="object-label">Wedge</span>
-        </button>
-        <button class="btn-object" id="obj-wedge-solid-inverted" data-object="wedge-solid-inverted">
-          <span class="object-label">Wedge Inv</span>
-        </button>
-        <button class="btn-object" id="obj-corner-wedge" data-object="corner-wedge">
-          <span class="object-label">Corner Wedge</span>
-        </button>
-        <button class="btn-object" id="obj-corner-wedge-inverted" data-object="corner-wedge-inverted">
-          <span class="object-label">Corner Wedge Inv</span>
-        </button>
-        <button class="btn-object" id="obj-cube-doorway" data-object="cube-doorway">
-          <span class="object-label">Doorway</span>
-        </button>
-        <button class="btn-object" id="obj-cube-window" data-object="cube-window">
-          <span class="object-label">Window</span>
-        </button>
-        <button class="btn-object" id="obj-pentashield-side" data-object="pentashield-side">
-          <span class="object-label">Pentashield Side</span>
-        </button>
-        <button class="btn-object" id="obj-pentashield-top" data-object="pentashield-top">
-          <span class="object-label">Pentashield Top</span>
-        </button>
-        <button class="btn-object" id="obj-half-wedge" data-object="half-wedge">
-          <span class="object-label">½ Wedge</span>
-        </button>
-        <button class="btn-object" id="obj-half-wedge-block" data-object="half-wedge-block">
-          <span class="object-label">½ Wedge + Block</span>
-        </button>
-        <button class="btn-object" id="obj-half-wedge-inverted" data-object="half-wedge-inverted">
-          <span class="object-label">½ Wedge Inverted</span>
-        </button>
-        <button class="btn-object" id="obj-half-wedge-block-inverted" data-object="half-wedge-block-inverted">
-          <span class="object-label">½ Wedge + Block Inverted</span>
+        <button class="btn-object" id="obj-triangle" data-object="triangle">
+          <span class="object-label">Triangle</span>
         </button>
       </div>
     </section>
@@ -337,6 +301,7 @@
   <div id="error-banner" class="error-banner" role="alert" aria-live="assertive"></div>
 
   <!-- ── Scripts (load order: app → scene → ui) ────────────────────── -->
+  <script src="geometry.js"></script>
   <script src="app.js"></script>
   <script src="scene.js"></script>
   <script src="ui.js"></script>

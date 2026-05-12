@@ -52,7 +52,7 @@ Do not read any file not listed above until explicitly greenlighted. Do not skip
 - If something outside the step scope looks broken or improvable, flag it — do not fix it.
 - Never edit any file in `docs/`. Flag any needed doc updates.
 - Never create new CSS variables. If one is needed, flag it and wait until new greenlight. Use only variables defined in `architecture.md § CSS Variables`.
-- For v2 steps: work on the `v2` branch only. Never apply v2 changes to `main` or `dev`.
+- For v2 steps: work on the `v2` branch only. Never apply v2 changes to `main` or `dev`. Ask user which branch is currently active in case of ambiguity.
 - If blocked, stop and state what is blocking you and what you need. Do not attempt workarounds.
 
 ---

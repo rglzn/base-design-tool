@@ -21,15 +21,9 @@ This project has two active versions:
 ## V1 Status
 
 ### Done
-- **Step 7** — Stamps: creation and management. Save selection → name prompt → normalise to origin → Supabase. Stamp list in sidebar with Place (no-op) and Delete (danger modal). Name uniqueness check. style.css stamp row styles.
-- **Step 8** — Stamps: placement + 2-column grid UI. Ghost follows cursor, Q/E rotates, T cycles anchor corner, red-if-blocked, click to place. Clicking tile activates placement ghost. Delete × on tile corner with danger modal. Thumbnails removed. Reuses multi-ghost infrastructure from 5d.
-- **Step 12** — Hotkey strip rework: static strip with contextual greying. T→Y remap for anchor. Strip pills with .hotkey-inactive contextual greying. Three bug fixes: Q/E dead capture in scene.js, Space preventDefault, Ctrl guard for solo-key only. (ui.js, app.js, scene.js, index.html, style.css)
-- **Step 6d** — Save overwrite fix: duplicate name detection on save, destructive confirmation modal, update existing row instead of insert. (app.js, ui.js)
-- **Step 6d.1** — Four new directional object types: half-wedge, half-wedge-block, half-wedge-inverted, half-wedge-block-inverted. All N/E/S/W. (app.js, ui.js, scene.js)
 - **Step 6c** — Two new directional object types: `pentashield-side` and `pentashield-top`. Identical to `cube-window`/`cube-doorway` in all respects (BoxGeometry base, N/E/S/W rotation, sidebar registration). Decoration: 7 solid diagonal lines, centre line anchored bottom-left → top-right corner, 3 lines evenly spaced either side. `pentashield-side`: decoration on south face. `pentashield-top`: decoration on top face. Decoration lines visible on ghost for window, doorway, and both pentashields. (app.js, ui.js, scene.js)
 
 ### To Do
-- **Step 14** — Two new object types + sidebar reorder. New types: `half-block-low` (full width, 0.5 height, y-offset 0) and `half-block-high` (full width, 0.5 height, y-offset 0.5). No direction, null like cube. Sidebar reordered to: Cube / Triangle [WIP], Half Block Low / Half Block High, Corner Block [WIP] / Stair, Wedge / Wedge Inv, Corner Wedge / Corner Wedge Inv, Doorway / Window, Pentashield Side / Pentashield Top, ½ Wedge / ½ Wedge + Block, ½ Wedge Inv / ½ Wedge + Block Inv. WIP buttons (Triangle [WIP], Corner Block [WIP]) are non-interactive placeholders — no object type, disabled, label only. (app.js, ui.js, scene.js)
 - **Step 10** — X-ray toggle.
 - **Step 11** — Clear all (destructive modal).
 
@@ -60,9 +54,7 @@ base_planner/
 │   ├── architect.md      ← Architect role rules (this Desktop chat)
 │   ├── dev.md            ← Dev role rules (fresh Desktop chat per step)
 │   ├── spec.md           ← v1 deep reference
-│   ├── spec-v2.md        ← v2 deep reference
-│   ├── v1-reference.png  ← visual reference
-│   └── v1-reference.html ← html reference
+│   └── spec-v2.md        ← v2 deep reference
 └── src/
     ├── index.html        ← shell, CDN tags
     ├── style.css         ← all styles
@@ -72,6 +64,7 @@ base_planner/
 ```
 
 v1 and v2 share the same `src/` files on different branches. `app.js` exposes `window.App`, `scene.js` exposes `window.Scene`, `ui.js` exposes `window.UI`. State lives in `App` only — all mutations go through `App` methods so autosave hooks centrally.
+The user manages git completely and changes the active branch accordingly, remind the user of this. All work is to be done on `src/` regardless of the branch.
 
 ---
 
@@ -159,4 +152,4 @@ Full graph model replacing the cubic integer voxel grid. The game uses a square-
 
 ## V2 Current State
 
-Not started. V1 must reach feature parity first.
+Not started.
