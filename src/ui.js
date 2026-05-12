@@ -695,11 +695,13 @@
       case 'q': case 'Q':
         if (App.state.placingMultiGhost) { App.rotateMultiGhost(-1); }
         else if (App.state.selectedObject === 'triangle') { Scene.cycleGhostRotation(-1); }
+        else if (App.state.selectedObject === 'square') { Scene.cycleGhostRotation(-1); }
         else if (_INCLINE_TYPES.has(App.state.selectedObject)) { App.rotatePlaceDirection(-1); Scene.markDirty(); }
         break;
       case 'e': case 'E':
         if (App.state.placingMultiGhost) { App.rotateMultiGhost(1); }
         else if (App.state.selectedObject === 'triangle') { Scene.cycleGhostRotation(1); }
+        else if (App.state.selectedObject === 'square') { Scene.cycleGhostRotation(1); }
         else if (_INCLINE_TYPES.has(App.state.selectedObject)) { App.rotatePlaceDirection(1); Scene.markDirty(); }
         break;
       case 't': case 'T':

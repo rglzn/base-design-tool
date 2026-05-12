@@ -134,22 +134,22 @@ Full graph model replacing the cubic integer voxel grid. The game uses a square-
 ## V2 Status
 
 ### Done
-—
+- **V2 Step 1** — Geometry primitives & rotation algebra. geometry.js created with 12-rotation set, square and triangle face descriptors, attachment transform.
+- **V2 Step 2** — State shape: pieces and connections. cells Map replaced with pieces Map and connection graph. Core App methods: placePiece, deletePiece, getPiece.
+- **V2 Step 3** — Render pieces from new state. _rebuildPieces renders squares and triangles from pieces Map.
+- **V2 Step 4** — Raycast + placement (squares only, axis-aligned).
+- **V2 Step 5** — Triangles + rotation cycling. Full placement context rules implemented (CTX_FLAT, CTX_SIDE, CTX_TRI). Square-on-triangle top/bottom with 3-slot Q/E edge cycling also implemented here.
 
 ### To Do
-- **V2 Step 1** — Geometry primitives & rotation algebra. Define the 12-rotation set, square and triangle face descriptors, and the attachment transform function. Pure maths, no UI. (new file: geometry.js)
-- **V2 Step 2** — State shape: pieces and connections. Replace cells Map with pieces Map and connection graph. Serialise/deserialise. Core App methods: placePiece, deletePiece, getPiece. UI will be broken at this point — that is expected.
-- **V2 Step 3** — Render pieces from new state. Walk pieces map, build mesh per piece at its world transform. Replace _rebuildCubes/_rebuildInclines with _rebuildPieces. Squares only at this stage.
-- **V2 Step 4** — Raycast + placement (squares only, axis-aligned). Pick a face, attach a new square. Prove the model can grow.
-- **V2 Step 5** — Triangles + rotation cycling. Add triangle as placeable shape. Q/E cycles valid rotations for current attachment face.
-- **V2 Step 6** — Delete a piece. Orphaned connected pieces stay; connections to deleted piece are nulled.
-- **V2 Step 7** — Select + single-piece operations (paint). Selection becomes Set<pieceId>.
-- **V2 Step 8** — Duplicate / pick-up: ghost as connected subgraph with root face. Rotation cycles root face and attachment rotation.
-- **V2 Step 9** — Stamps as saved subgraphs. Reuses Step 8 ghost infrastructure.
-- **V2 Step 10** — Footprint test in world space. Polygon-in-landclaim test for squares and triangles.
-- **V2 Step 11** — Direction HUD rework. N/E/S/W replaced with 12-rotation indicator.
-- **V2 Step 12** — Save/load, project CRUD. Serialisation format update only; CRUD logic unchanged.
+- **V2 Step 6** — Piece family audit. Audit scene.js, ui.js, and geometry.js for all hard-coded `type === 'square'` and `type === 'triangle'` conditionals. Replace with a `PIECE_FAMILY` concept: `'square-family'` (square and all future cube-shaped pieces: wedge, window, etc.) and `'triangle-family'`. Define the family lookup in geometry.js and use it everywhere. No new piece types added in this step — audit and refactor only. (geometry.js, scene.js, ui.js)
+- **V2 Step 7** — Delete a piece. Orphaned connected pieces stay; connections to deleted piece are nulled.
+- **V2 Step 8** — Select + single-piece operations (paint). Selection becomes Set<pieceId>.
+- **V2 Step 9** — Duplicate / pick-up: ghost as connected subgraph with root face. Rotation cycles root face and attachment rotation.
+- **V2 Step 10** — Stamps as saved subgraphs. Reuses Step 9 ghost infrastructure.
+- **V2 Step 11** — Footprint test in world space. Polygon-in-landclaim test for squares and triangles.
+- **V2 Step 12** — Direction HUD rework. N/E/S/W replaced with 12-rotation indicator.
+- **V2 Step 13** — Save/load, project CRUD. Serialisation format update only; CRUD logic unchanged.
 
 ## V2 Current State
 
-Not started.
+Steps 1–5 complete. Squares and triangles fully placeable with correct attachment, rotation, and ghost behaviour. Step 6 (piece family audit) is next — required before any new piece types are introduced.

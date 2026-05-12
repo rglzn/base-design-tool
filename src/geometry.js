@@ -210,14 +210,14 @@
     {
       // Bottom face (index 0)
       index: 0,
-      localPosition: Vec3.create(0, 0, TRI_BASE_Z / 2),
+      localPosition: Vec3.create(0, 0, 0),
       outwardNormal:  Vec3.create(0, -1, 0),
       edgeVector:     Vec3.create(1, 0, 0),
     },
     {
       // Top face (index 1)
       index: 1,
-      localPosition: Vec3.create(0, 1, TRI_BASE_Z / 2),
+      localPosition: Vec3.create(0, 1, 0),
       outwardNormal:  Vec3.create(0, 1, 0),
       edgeVector:     Vec3.create(1, 0, 0),
     },

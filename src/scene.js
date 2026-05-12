@@ -746,8 +746,62 @@
 
       if (isTriPiece && isHorizFace) {
         // ── CTX_TRI: top/bottom of a triangle piece ───────────────
-        _ghostContext  = 'tri';
-        rotationIndex  = piece.rotationIndex; // inherit exactly
+        _ghostContext = 'tri';
+        if (newType === 'square') {
+          // Square on tri top/bottom: Q/E cycles 3 slots, one per triangle edge.
+          // slot 0 → N face (index 2), slot 1 → SW face (index 3), slot 2 → SE face (index 4).
+          // Position: attach cube bottom/top face to the triangle top/bottom face.
+          // Rotation: align one cube side face to the selected triangle edge normal.
+          const TRI_EDGE_FACES = [2, 3, 4];
+          const slot        = ((_ghostRotationOffset % 3) + 3) % 3;
+          const triFaceIdx  = TRI_EDGE_FACES[slot];
+          const triFaceDesc = G.TRIANGLE_FACES[triFaceIdx];
+
+          // Step 1: position — attach via the actual top/bottom face.
+          const isTop   = bestFaceA.outwardNormal.y > 0;
+          const squareBottomFace = G.SQUARE_FACES[0]; // bottom face (index 0, normal -y)
+          const squareTopFace    = G.SQUARE_FACES[1]; // top face (index 1, normal +y)
+          const squareFaceB = isTop ? squareBottomFace : squareTopFace;
+          selfFaceIndex   = squareFaceB.index;
+          attachFaceIndex = bestFaceA.index;
+          const T_B_pos = G.getAttachmentTransform(T_A, bestFaceA, squareFaceB);
+          // T_B_pos gives correct Y (triangle has no pieceOrigin Y offset, net no change).
+          // For XZ: centre the cube on the triangle's XZ centroid, then shift so the
+          // selected cube side face aligns flush to the selected triangle edge.
+          // The cube side face is 0.5 units from its centroid; the triangle edge is
+          // |triEdgeLocalPos| units from the triangle centroid in the edge normal direction.
+          const triEdgeWorld   = G.faceDescInWorld(triFaceDesc, T_A);
+          const triEdgeDist    = Math.abs(G.Vec3.dot(
+            G.Vec3.sub(triEdgeWorld.worldPosition, T_A.position),
+            triEdgeWorld.worldNormal
+          ));
+          // Shift: move cube centroid so its face (0.5 units out) meets the triangle edge.
+          const shift = triEdgeDist - 0.5;
+          ghostPos = {
+            x: Math.round((T_B_pos.position.x - 0.5 + triEdgeWorld.worldNormal.x * shift) * 1000) / 1000,
+            y: Math.round(T_B_pos.position.y * 1000) / 1000,
+            z: Math.round((T_B_pos.position.z - 0.5 + triEdgeWorld.worldNormal.z * shift) * 1000) / 1000,
+          };
+
+          // Step 2: rotation — find the rotation index that aligns a cube side
+          // face normal to oppose the selected triangle edge outward normal.
+          const triEdgeWorldNormal = G.faceDescInWorld(triFaceDesc, T_A).worldNormal;
+          // We want a cube side face whose outward normal, when rotated by r,
+          // best opposes triEdgeWorldNormal (i.e. points toward it).
+          // The cube south face (index 4, normal +z at rot 0) is the reference.
+          // Find r such that rot(r) * southNormal aligns with triEdgeWorldNormal.
+          const cubeSouthNormal = G.SQUARE_FACES[4].outwardNormal; // (0,0,1)
+          let bestRot = 0, bestRotDot = -Infinity;
+          for (let r = 0; r < 12; r++) {
+            const m = G.rotationMatrix(r);
+            const rotated = G.Vec3.applyMat3(cubeSouthNormal, m);
+            const d = G.Vec3.dot(rotated, triEdgeWorldNormal);
+            if (d > bestRotDot) { bestRotDot = d; bestRot = r; }
+          }
+          rotationIndex = bestRot;
+        } else {
+          rotationIndex = piece.rotationIndex; // triangle inherits exactly
+        }
       } else if (isHorizFace) {
         // ── CTX_FLAT: top/bottom of a non-triangle piece ──────────
         _ghostContext = 'flat';
@@ -879,12 +933,19 @@
 
   /*
    * Cycle the ghost's rotation by dir (+1 or -1).
-   * Only active in CTX_FLAT (4 cardinal slots).  No-op in CTX_SIDE / CTX_TRI.
+   * Active in CTX_FLAT (4 cardinal slots) and CTX_TRI when placing a square
+   * (3 triangle-edge slots).  No-op in CTX_SIDE or CTX_TRI with triangle.
    */
   function cycleGhostRotation(dir) {
     if (!_hoverHit) return;
-    if (_ghostContext !== 'flat') return;
-    _ghostRotationOffset = ((_ghostRotationOffset + dir) % 4 + 4) % 4;
+    const ghost = App.state.ghost;
+    const isTriSquare = _ghostContext === 'tri' && ghost && ghost.type === 'square';
+    if (_ghostContext !== 'flat' && !isTriSquare) return;
+    if (isTriSquare) {
+      _ghostRotationOffset = ((_ghostRotationOffset - dir) % 3 + 3) % 3;
+    } else {
+      _ghostRotationOffset = ((_ghostRotationOffset + dir) % 4 + 4) % 4;
+    }
     _computeGhost(_hoverHit);
     markDirty();
   }
