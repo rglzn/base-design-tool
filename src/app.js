@@ -695,6 +695,7 @@
     loadStamps, saveStamp, deleteStamp, getStampByName, activateStampPlacement,
     getSettings, saveSettings,
     init,
+    _serialize, _deserialize,
   };
 
 }());

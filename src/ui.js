@@ -794,6 +794,38 @@
       _showLoadProjectModal();
     });
 
+    document.getElementById('btn-export-project').addEventListener('click', () => {
+      const data = JSON.stringify(App._serialize(), null, 2);
+      const name = (App.state.project?.name || 'design').replace(/[^a-z0-9_-]/gi, '_');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+      a.download = name + '.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    document.getElementById('btn-import-project').addEventListener('click', () => {
+      document.getElementById('import-file-input').click();
+    });
+
+    document.getElementById('import-file-input').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = evt => {
+        try {
+          const data = JSON.parse(evt.target.result);
+          App._deserialize(data);
+          if (window.Scene) window.Scene.markDirty();
+          refresh();
+        } catch (_) {
+          showError('Import failed: invalid file.');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
     document.getElementById('btn-settings').addEventListener('click', () => {
       _showSettingsModal();
     });
