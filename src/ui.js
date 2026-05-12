@@ -694,15 +694,13 @@
       case 'r': case 'R': App.setTool('select'); break;
       case 'q': case 'Q':
         if (App.state.placingMultiGhost) { App.rotateMultiGhost(-1); }
-        else if (App.state.selectedObject === 'triangle') { Scene.cycleGhostRotation(-1); }
-        else if (App.state.selectedObject === 'square') { Scene.cycleGhostRotation(-1); }
-        else if (_INCLINE_TYPES.has(App.state.selectedObject)) { App.rotatePlaceDirection(-1); Scene.markDirty(); }
+        else if (Geometry.getPieceFamily(App.state.selectedObject) === 'triangle-family') { Scene.cycleGhostRotation(-1); }
+        else if (Geometry.getPieceFamily(App.state.selectedObject) === 'square-family') { Scene.cycleGhostRotation(-1); }
         break;
       case 'e': case 'E':
         if (App.state.placingMultiGhost) { App.rotateMultiGhost(1); }
-        else if (App.state.selectedObject === 'triangle') { Scene.cycleGhostRotation(1); }
-        else if (App.state.selectedObject === 'square') { Scene.cycleGhostRotation(1); }
-        else if (_INCLINE_TYPES.has(App.state.selectedObject)) { App.rotatePlaceDirection(1); Scene.markDirty(); }
+        else if (Geometry.getPieceFamily(App.state.selectedObject) === 'triangle-family') { Scene.cycleGhostRotation(1); }
+        else if (Geometry.getPieceFamily(App.state.selectedObject) === 'square-family') { Scene.cycleGhostRotation(1); }
         break;
       case 't': case 'T':
         App.setTool('delete');

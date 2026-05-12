@@ -232,9 +232,9 @@
     _pieceGroup.clear();
 
     App.state.pieces.forEach(piece => {
-      const isSquare   = piece.type === 'square';
-      const isTriangle = piece.type === 'triangle';
-      if (!isSquare && !isTriangle) return;
+      const family = Geometry.getPieceFamily(piece.type);
+      const isSquare   = family === 'square-family';
+      const isTriangle = family === 'triangle-family';
 
       const selected = App.state.selection.has(piece.id);
       const mat = new THREE.MeshLambertMaterial({
@@ -624,7 +624,7 @@
   }
 
   function _ghostInFootprint(type, position, rotationIndex) {
-    if (type === 'triangle') return _ghostInFootprintTriangle(position, rotationIndex);
+    if (Geometry.getPieceFamily(type) === 'triangle-family') return _ghostInFootprintTriangle(position, rotationIndex);
     return _ghostInFootprintSquare(position);
   }
 
@@ -965,7 +965,7 @@
     if (!ghost || !App.state.showPlacementGhost) return;
 
     const mat      = ghost.valid ? _ghostMatValid : _ghostMatInvalid;
-    const isSquare = ghost.type !== 'triangle';
+    const isSquare = Geometry.getPieceFamily(ghost.type) === 'square-family';
     const geo      = isSquare ? _squareGeo : _triangleGeo;
     const mesh     = new THREE.Mesh(geo, mat);
 
@@ -1061,7 +1061,12 @@
     const v = new THREE.Vector3();
 
     App.state.pieces.forEach(piece => {
-      v.set(piece.position.x + 0.5, piece.position.y + 0.5, piece.position.z + 0.5);
+      const isSquareFam = Geometry.getPieceFamily(piece.type) === 'square-family';
+      if (isSquareFam) {
+        v.set(piece.position.x + 0.5, piece.position.y + 0.5, piece.position.z + 0.5);
+      } else {
+        v.set(piece.position.x, piece.position.y, piece.position.z);
+      }
       v.project(_camera);
       const sx = (v.x * 0.5 + 0.5) * rect.width  + rect.left;
       const sy = (-v.y * 0.5 + 0.5) * rect.height + rect.top;

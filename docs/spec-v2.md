@@ -29,6 +29,31 @@ v2 uses a 12-rotation set. Rotation index 0–11 maps to angles 0°, 30°, 60°,
 
 ---
 
+## § Piece Types
+
+All piece types and their family membership. `getPieceFamily(type)` in geometry.js is the single source of truth — throws on unknown type.
+
+**square-family** — placement logic identical for all: integer grid position, rotationIndex 0–11, attachment transform via face descriptors. Render geometry differs per type.
+- `square` — solid 1×1×1 cube, no direction.
+- `stair-solid` — 8-step staircase profile, directional.
+- `wedge-solid` — smooth diagonal slope low-front to high-back, directional.
+- `wedge-solid-inverted` — mirror of wedge-solid, directional.
+- `corner-wedge` — square pyramid, apex at NW top corner, directional.
+- `corner-wedge-inverted` — square pyramid flipped, apex at NW bottom corner, directional.
+- `cube-doorway` — cube with doorway outline decal on south face, directional.
+- `cube-window` — cube with window rect decal on south face, directional.
+- `pentashield-side` — cube with 7 diagonal lines on south face, directional.
+- `pentashield-top` — cube with 7 diagonal lines on top face, directional.
+- `half-wedge` — directional.
+- `half-wedge-block` — directional.
+- `half-wedge-inverted` — directional.
+- `half-wedge-block-inverted` — directional.
+
+**triangle-family**
+- `triangle` — equilateral triangle prism, 1 unit side, 1 unit tall. Must connect to an existing piece face; cannot be placed on empty footprint.
+
+---
+
 ## § State Shape
 
 Persisted: `pieces`, `connections`, `colors`, `building`.

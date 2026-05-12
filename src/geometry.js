@@ -384,6 +384,40 @@
   }
 
   // ---------------------------------------------------------------------------
+  // § Piece Family
+  // ---------------------------------------------------------------------------
+
+  const PIECE_FAMILY = Object.freeze({
+    'square':                    'square-family',
+    'stair-solid':               'square-family',
+    'wedge-solid':               'square-family',
+    'wedge-solid-inverted':      'square-family',
+    'corner-wedge':              'square-family',
+    'corner-wedge-inverted':     'square-family',
+    'cube-doorway':              'square-family',
+    'cube-window':               'square-family',
+    'pentashield-side':          'square-family',
+    'pentashield-top':           'square-family',
+    'half-wedge':                'square-family',
+    'half-wedge-block':          'square-family',
+    'half-wedge-inverted':       'square-family',
+    'half-wedge-block-inverted': 'square-family',
+    'triangle':                  'triangle-family',
+  });
+
+  /**
+   * Return the family string for a given piece type.
+   * Throws on unknown type.
+   * @param {string} type
+   * @returns {'square-family'|'triangle-family'}
+   */
+  function getPieceFamily(type) {
+    const family = PIECE_FAMILY[type];
+    if (!family) throw new Error(`geometry.getPieceFamily: unknown type "${type}"`);
+    return family;
+  }
+
+  // ---------------------------------------------------------------------------
   // § Public API
   // ---------------------------------------------------------------------------
 
@@ -406,6 +440,10 @@
 
     // Vec3 utilities (exposed for use by scene.js / app.js)
     Vec3: Object.freeze(Vec3),
+
+    // Piece family
+    PIECE_FAMILY,
+    getPieceFamily,
   });
 
 })();

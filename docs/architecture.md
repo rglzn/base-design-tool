@@ -141,15 +141,16 @@ Full graph model replacing the cubic integer voxel grid. The game uses a square-
 - **V2 Step 5** — Triangles + rotation cycling. Full placement context rules implemented (CTX_FLAT, CTX_SIDE, CTX_TRI). Square-on-triangle top/bottom with 3-slot Q/E edge cycling also implemented here.
 
 ### To Do
-- **V2 Step 6** — Piece family audit. Audit scene.js, ui.js, and geometry.js for all hard-coded `type === 'square'` and `type === 'triangle'` conditionals. Replace with a `PIECE_FAMILY` concept: `'square-family'` (square and all future cube-shaped pieces: wedge, window, etc.) and `'triangle-family'`. Define the family lookup in geometry.js and use it everywhere. No new piece types added in this step — audit and refactor only. (geometry.js, scene.js, ui.js)
-- **V2 Step 7** — Delete a piece. Orphaned connected pieces stay; connections to deleted piece are nulled.
-- **V2 Step 8** — Select + single-piece operations (paint). Selection becomes Set<pieceId>.
-- **V2 Step 9** — Duplicate / pick-up: ghost as connected subgraph with root face. Rotation cycles root face and attachment rotation.
-- **V2 Step 10** — Stamps as saved subgraphs. Reuses Step 9 ghost infrastructure.
-- **V2 Step 11** — Footprint test in world space. Polygon-in-landclaim test for squares and triangles.
-- **V2 Step 12** — Direction HUD rework. N/E/S/W replaced with 12-rotation indicator.
-- **V2 Step 13** — Save/load, project CRUD. Serialisation format update only; CRUD logic unchanged.
+- **V2 Step 6** — Piece family refactor. Define `PIECE_FAMILY` in geometry.js: `'square-family'` maps all 14 square-family types (square, stair-solid, wedge-solid, wedge-solid-inverted, corner-wedge, corner-wedge-inverted, cube-doorway, cube-window, pentashield-side, pentashield-top, half-wedge, half-wedge-block, half-wedge-inverted, half-wedge-block-inverted); `'triangle-family'` maps triangle. Export `getPieceFamily(type)` — throws on unknown type. Replace all raw type string checks in scene.js and ui.js with `getPieceFamily()` calls, preserving all existing logic exactly. Split `selectInScreenRect` into family-aware branches: square-family applies `+0.5` centroid offset, triangle-family uses raw position. No new piece types, no behaviour changes beyond the centroid fix. (geometry.js, scene.js, ui.js)
+- **V2 Step 7** — Full shape library. Port all 13 remaining square-family types from v1 into v2. Each type: render geometry in scene.js (`_makeInclineGeo` / `_addDecalLines` as appropriate), face descriptors in geometry.js, sidebar registration in ui.js. All types use square-family placement logic — no new placement rules. Directional types (all except cube/square) use existing N/E/S/W rotation via rotationIndex. (geometry.js, scene.js, ui.js)
+- **V2 Step 8** — Delete a piece. Orphaned connected pieces stay; connections to deleted piece are nulled.
+- **V2 Step 9** — Select + single-piece operations (paint). Selection becomes Set<pieceId>.
+- **V2 Step 10** — Duplicate / pick-up: ghost as connected subgraph with root face. Rotation cycles root face and attachment rotation.
+- **V2 Step 11** — Stamps as saved subgraphs. Reuses Step 10 ghost infrastructure.
+- **V2 Step 12** — Footprint test in world space. Polygon-in-landclaim test for squares and triangles.
+- **V2 Step 13** — Direction HUD rework. N/E/S/W replaced with 12-rotation indicator.
+- **V2 Step 14** — Save/load, project CRUD. Serialisation format update only; CRUD logic unchanged.
 
 ## V2 Current State
 
-Steps 1–5 complete. Squares and triangles fully placeable with correct attachment, rotation, and ghost behaviour. Step 6 (piece family audit) is next — required before any new piece types are introduced.
+Steps 1–5 complete. Squares and triangles fully placeable with correct attachment, rotation, and ghost behaviour. Step 6 (piece family refactor) is next — required before any new piece types are introduced.
