@@ -21,13 +21,7 @@ This project has two active versions:
 ## V1 Status
 
 ### Done
-- **Step 7** — Stamps: creation and management. Save selection → name prompt → normalise to origin → Supabase. Stamp list in sidebar with Place (no-op) and Delete (danger modal). Name uniqueness check. style.css stamp row styles.
-- **Step 8** — Stamps: placement + 2-column grid UI. Ghost follows cursor, Q/E rotates, T cycles anchor corner, red-if-blocked, click to place. Clicking tile activates placement ghost. Delete × on tile corner with danger modal. Thumbnails removed. Reuses multi-ghost infrastructure from 5d.
-- **Step 12** — Hotkey strip rework: static strip with contextual greying. T→Y remap for anchor. Strip pills with .hotkey-inactive contextual greying. Three bug fixes: Q/E dead capture in scene.js, Space preventDefault, Ctrl guard for solo-key only. (ui.js, app.js, scene.js, index.html, style.css)
-- **Step 6d** — Save overwrite fix: duplicate name detection on save, destructive confirmation modal, update existing row instead of insert. (app.js, ui.js)
-- **Step 6d.1** — Four new directional object types: half-wedge, half-wedge-block, half-wedge-inverted, half-wedge-block-inverted. All N/E/S/W. (app.js, ui.js, scene.js)
 - **Step 6c** — Two new directional object types: `pentashield-side` and `pentashield-top`. Identical to `cube-window`/`cube-doorway` in all respects (BoxGeometry base, N/E/S/W rotation, sidebar registration). Decoration: 7 solid diagonal lines, centre line anchored bottom-left → top-right corner, 3 lines evenly spaced either side. `pentashield-side`: decoration on south face. `pentashield-top`: decoration on top face. Decoration lines visible on ghost for window, doorway, and both pentashields. (app.js, ui.js, scene.js)
-- **Step 14** — Two new object types + sidebar reorder. New types: `half-block-low` (full width, 0.5 height, y-offset 0) and `half-block-high` (full width, 0.5 height, y-offset 0.5). No direction, null like cube. Sidebar reordered to: Cube / Triangle [WIP], Half Block Low / Half Block High, Corner Block [WIP] / Stair, Wedge / Wedge Inv, Corner Wedge / Corner Wedge Inv, Doorway / Window, Pentashield Side / Pentashield Top, ½ Wedge / ½ Wedge + Block, ½ Wedge Inv / ½ Wedge + Block Inv. WIP buttons (Triangle [WIP], Corner Block [WIP]) are non-interactive placeholders — no object type, disabled, label only. (app.js, ui.js, scene.js)
 
 ### To Do
 - **Step 10** — X-ray toggle.
@@ -60,9 +54,7 @@ base_planner/
 │   ├── architect.md      ← Architect role rules (this Desktop chat)
 │   ├── dev.md            ← Dev role rules (fresh Desktop chat per step)
 │   ├── spec.md           ← v1 deep reference
-│   ├── spec-v2.md        ← v2 deep reference
-│   ├── v1-reference.png  ← visual reference
-│   └── v1-reference.html ← html reference
+│   └── spec-v2.md        ← v2 deep reference
 └── src/
     ├── index.html        ← shell, CDN tags
     ├── style.css         ← all styles
@@ -72,6 +64,7 @@ base_planner/
 ```
 
 v1 and v2 share the same `src/` files on different branches. `app.js` exposes `window.App`, `scene.js` exposes `window.Scene`, `ui.js` exposes `window.UI`. State lives in `App` only — all mutations go through `App` methods so autosave hooks centrally.
+The user manages git completely and changes the active branch accordingly, remind the user of this. All work is to be done on `src/` regardless of the branch.
 
 ---
 
@@ -141,22 +134,28 @@ Full graph model replacing the cubic integer voxel grid. The game uses a square-
 ## V2 Status
 
 ### Done
-—
+- **V2 Step 8** — Delete a piece. Orphaned connected pieces stay; connections to deleted piece are nulled.
+- **V2 Step 9** — Select + single-piece operations (paint). Selection becomes Set<pieceId>.
+- **V2 Step 10** — Duplicate / pick-up: ghost as connected subgraph with root face. Rotation cycles root face and attachment rotation.
+- **V2 Step 11** — Stamps as saved subgraphs. Reuses Step 10 ghost infrastructure.
+- **V2 Step 12** — Footprint test in world space. Polygon-in-landclaim test for squares and triangles.
+- **V2 Step 13** — Save/load, project CRUD. Serialisation format update only; CRUD logic unchanged.
+- **V2 Step 1** — Geometry primitives & rotation algebra. geometry.js created with 12-rotation set, square and triangle face descriptors, attachment transform.
+- **V2 Step 2** — State shape: pieces and connections. cells Map replaced with pieces Map and connection graph. Core App methods: placePiece, deletePiece, getPiece.
+- **V2 Step 3** — Render pieces from new state. _rebuildPieces renders squares and triangles from pieces Map.
+- **V2 Step 4** — Raycast + placement (squares only, axis-aligned).
+- **V2 Step 5** — Triangles + rotation cycling. Full placement context rules implemented (CTX_FLAT, CTX_SIDE, CTX_TRI). Square-on-triangle top/bottom with 3-slot Q/E edge cycling also implemented here.
+- **V2 Step 6** — Piece family refactor. Define `PIECE_FAMILY` in geometry.js: `'square-family'` maps all 14 square-family types (square, stair-solid, wedge-solid, wedge-solid-inverted, corner-wedge, corner-wedge-inverted, cube-doorway, cube-window, pentashield-side, pentashield-top, half-wedge, half-wedge-block, half-wedge-inverted, half-wedge-block-inverted); `'triangle-family'` maps triangle. Export `getPieceFamily(type)` — throws on unknown type. Replace all raw type string checks in scene.js and ui.js with `getPieceFamily()` calls, preserving all existing logic exactly. Split `selectInScreenRect` into family-aware branches: square-family applies `+0.5` centroid offset, triangle-family uses raw position. No new piece types, no behaviour changes beyond the centroid fix. (geometry.js, scene.js, ui.js)
+- **V2 Step 7** — Full shape library. Port all 13 remaining square-family types from v1 into v2. Each type: render geometry in scene.js (`_makeInclineGeo` / `_addDecalLines` as appropriate), face descriptors in geometry.js, sidebar registration in ui.js. All types use square-family placement logic — no new placement rules. Directional types (all except cube/square) use existing N/E/S/W rotation via rotationIndex. (geometry.js, scene.js, ui.js)
 
 ### To Do
-- **V2 Step 1** — Geometry primitives & rotation algebra. Define the 12-rotation set, square and triangle face descriptors, and the attachment transform function. Pure maths, no UI. New file: `src/geometry.js` exposing `window.Geometry` with: `ROTATIONS` (the 12 angles in radians), `SQUARE_FACES`, `TRIANGLE_FACES` (face descriptor arrays per spec-v2.md § Geometry), `getAttachmentTransform(pieceA, faceIndexA, pieceTypeB, faceIndexB) → { position, rotationIndex } | null`, and `getGroundAttachmentTransform(cursorXZ, pieceType) → { position, rotationIndex } | null`. Acceptance: a console-runnable sanity check (in the same file, behind a `Geometry._test()` function) covering at least — square-east-to-square-west attachment at rotation 0; triangle-side-A to square-east attachment producing rotation index 0; chained attachment of triangle→square→triangle producing a rotation index in the 0–11 set; ground attachment of a square at cursor (5.3, 7.8) producing position (5.5, 0.5, 7.5) at rotation 0; an attachment that would require a non-multiple-of-30° rotation returns null. Spec sections needed: § Geometry.
-- **V2 Step 2** — State shape: pieces and connections. Replace cells Map with pieces Map and connection graph per spec-v2.md § State Shape. Implement `_serialize()` / `_deserialize()` in the new format. Core App methods: `placePiece`, `deletePiece`, `getPiece`, `addConnection`, `removeConnection`. UI will be broken at this point — that is expected. Spec sections needed: § State Shape.
-- **V2 Step 3** — Render pieces from new state. Walk pieces map, build mesh per piece at its world transform. Replace _rebuildCubes/_rebuildInclines with _rebuildPieces. Squares only at this stage.
-- **V2 Step 4** — Raycast + placement (squares only, axis-aligned). Pick a face, attach a new square. Prove the model can grow.
-- **V2 Step 5** — Triangles + rotation cycling. Add triangle as placeable shape. Q/E cycles valid rotations for current attachment face.
-- **V2 Step 6** — Delete a piece. Orphaned connected pieces stay in place; connections to the deleted piece are removed from both sides of the graph. No visual flag for orphans at this stage (deferred — revisit if it becomes a usability issue).
-- **V2 Step 7** — Select + single-piece operations (paint). Selection becomes Set<pieceId>.
-- **V2 Step 8** — Duplicate / pick-up: ghost as connected subgraph with root face. Rotation cycles root face and attachment rotation.
-- **V2 Step 9** — Stamps as saved subgraphs. Reuses Step 8 ghost infrastructure.
-- **V2 Step 10** — Footprint test in world space. Polygon-in-landclaim test for squares and triangles.
-- **V2 Step 11** — Direction HUD rework. N/E/S/W replaced with 12-rotation indicator.
-- **V2 Step 12** — Save/load, project CRUD. Serialisation format update only; CRUD logic unchanged.
+- **V2 Step 14** — New shape library additions: half-corner, half-corner-inverted, half-corner-plus, half-corner-inverted-plus, half-cube-low, half-cube-high. Same pattern as Step 7 — geometry, face descriptors, sidebar registration. (geometry.js, scene.js, ui.js)
+- **V2 Step 15** — Review and finalise all object names across the full shape library for consistency and clarity. Architect-only task — no Dev involvement.
+- **V2 Step 16** — Sidebar UI categories discussion. Object list is long and growing; evaluate grouping by family or function. Needs design decision before implementation. Architect-led discussion.
+- **V2 Step 17** — Refactor all reference docs to v2. v1 references deprecated; spec-v2.md to absorb relevant detail from spec.md. Architect-only task.
+- **V2 Step 18** — Full code audit with Opus. Review all source files for correctness, consistency, and technical debt against the finalised v2 spec.
+- **V2 Step 19** — Collision visualisation improvement. When ghost is red, highlight the conflicting piece(s) in the scene to make the conflict source visible. (scene.js)
 
 ## V2 Current State
 
-Not started. V1 must reach feature parity first.
+Steps 1–13 complete. All core placement, deletion, selection, stamps, footprint, and save/load implemented. Next step is Step 14 (new shape library additions).

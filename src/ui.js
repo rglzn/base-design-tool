@@ -569,24 +569,9 @@
   }
 
   // ── Viewport hover (placement ghost) ──────────────────────────
-  let _lastPlacedKey = null;
 
   function _onViewportMove(e) {
     if (_currentView !== 'canvas') return;
-
-    // Multi-ghost tracking
-    if (App.state.placingMultiGhost) {
-      const hit = Scene.pickAt(e.clientX, e.clientY);
-      if (hit) {
-        // Use targetKey for ground hits, key's neighbour for solid hits
-        const refKey = hit.targetKey || hit.key;
-        if (refKey) {
-          const [gx, , gz] = refKey.split(',').map(Number);
-          Scene.setMultiGhostOrigin(gx, gz);
-        }
-      }
-      return;
-    }
 
     if (App.state.tool === 'area-select' && (e.buttons & 1)) {
       const dx = e.clientX - _mouseDownX;
@@ -603,13 +588,15 @@
       return;
     }
 
+    if (App.state.placingMultiGhost) {
+      const hit = Scene.pickAt(e.clientX, e.clientY);
+      Scene.setMultiGhostOrigin(hit);
+      return;
+    }
+
     if (App.state.tool !== 'build') return;
     const hit = Scene.pickAt(e.clientX, e.clientY);
-    if (_lastPlacedKey && hit && hit.buildTarget !== _lastPlacedKey) {
-      _lastPlacedKey = null;
-    }
-    const suppressedHit = (_lastPlacedKey && hit && hit.buildTarget === _lastPlacedKey) ? null : hit;
-    Scene.setHoverHit(suppressedHit);
+    Scene.setHoverHit(hit);
   }
 
   // ── Viewport click handling ────────────────────────────────────
@@ -623,47 +610,52 @@
 
   function _onViewportPointerUp(e) {
     if (_currentView !== 'canvas') return;
-    // Right-click (button 2) is camera rotate — never touches selection.
     if (e.button === 2) return;
     if (e.target.closest('#hud')) { _asRemoveRect(); return; }
 
-    // Multi-ghost click to place
+    // Multi-ghost placement — highest priority, fires before all other logic
     if (App.state.placingMultiGhost) {
+      _asRemoveRect();
       const hit = Scene.pickAt(e.clientX, e.clientY);
-      if (hit) {
-        const refKey = hit.targetKey || hit.key;
-        if (refKey) {
-          const [gx, , gz] = refKey.split(',').map(Number);
-          App.commitMultiGhost(gx, gz);
-          Scene.setMultiGhostOrigin(null, null);
-        }
-      }
+      Scene.setMultiGhostOrigin(hit);
+      const origin = hit
+        ? (hit.type === 'ground'
+            ? { x: hit.gridX, y: 0, z: hit.gridZ }
+            : (() => {
+                const p = App.getPiece(hit.pieceId);
+                if (!p) return null;
+                const n = hit.faceNormal;
+                return { x: p.position.x + Math.round(n.x), y: p.position.y + Math.round(n.y), z: p.position.z + Math.round(n.z) };
+              })()
+          )
+        : null;
+      if (origin) App.placeMultiGhost(origin);
       return;
     }
 
     if (App.state.tool === 'area-select') {
       if (_asDragging) {
-        const keys = Scene.selectInScreenRect(_asStartX, _asStartY, e.clientX, e.clientY);
+        const ids = Scene.selectInScreenRect(_asStartX, _asStartY, e.clientX, e.clientY);
         _asRemoveRect();
         if (e.shiftKey) {
-          keys.forEach(k => {
-            App.state.selection.has(k) ? App.removeFromSelection(k) : App.addToSelection(k);
+          ids.forEach(id => {
+            App.state.selection.has(id) ? App.removeFromSelection(id) : App.addToSelection(id);
           });
-          if (keys.length) Scene.markDirty();
+          if (ids.length) Scene.markDirty();
         } else {
           App.clearSelection();
-          keys.forEach(k => App.addToSelection(k));
+          ids.forEach(id => App.addToSelection(id));
         }
       } else {
         const hit = Scene.pickAt(e.clientX, e.clientY);
-        if (hit && hit.key) {
+        if (hit && hit.type === 'piece') {
           if (e.shiftKey) {
-            App.state.selection.has(hit.key)
-              ? App.removeFromSelection(hit.key)
-              : App.addToSelection(hit.key);
+            App.state.selection.has(hit.pieceId)
+              ? App.removeFromSelection(hit.pieceId)
+              : App.addToSelection(hit.pieceId);
           } else {
             App.clearSelection();
-            App.addToSelection(hit.key);
+            App.addToSelection(hit.pieceId);
           }
         } else if (!e.shiftKey) {
           App.clearSelection();
@@ -679,36 +671,46 @@
     if (dx * dx + dy * dy > 25) return;
 
     const hit  = Scene.pickAt(e.clientX, e.clientY);
-    if (!hit) return;
     const tool = App.state.tool;
 
     if (tool === 'build') {
-      if (hit.buildTarget) {
-        const [x, y, z] = hit.buildTarget.split(',').map(Number);
-        App.placeCell(x, y, z);
-        _lastPlacedKey = hit.buildTarget;
-      }
+      const ghost = App.state.ghost;
+      if (!ghost || !ghost.valid) return;
+      App.placePiece({
+        type:            App.state.selectedObject,
+        position:        ghost.position,
+        rotationIndex:   ghost.rotationIndex ?? 0,
+        colorId:         App.state.selectedColorId,
+        attachToPieceId: ghost.attachToPieceId,
+        attachFaceIndex: ghost.attachFaceIndex,
+        selfFaceIndex:   ghost.selfFaceIndex,
+      });
+      App.clearGhost();
     } else if (tool === 'delete') {
-      if (hit.key) {
-        const [x, y, z] = hit.key.split(',').map(Number);
-        App.deleteCell(x, y, z);
+      if (!hit) return;
+      if (hit.type === 'piece') {
+        App.deletePiece(hit.pieceId);
       }
     } else if (tool === 'select') {
-      if (hit.key) {
+      if (!hit) { if (!e.shiftKey) App.clearSelection(); return; }
+      if (hit.type === 'piece') {
         if (e.shiftKey) {
-          App.state.selection.has(hit.key)
-            ? App.removeFromSelection(hit.key)
-            : App.addToSelection(hit.key);
+          App.state.selection.has(hit.pieceId)
+            ? App.removeFromSelection(hit.pieceId)
+            : App.addToSelection(hit.pieceId);
         } else {
           App.clearSelection();
-          App.addToSelection(hit.key);
+          App.addToSelection(hit.pieceId);
         }
       } else if (!e.shiftKey) {
         App.clearSelection();
       }
     } else if (tool === 'paint') {
-      if (hit.key) {
-        App.repaintCells([hit.key], App.state.selectedColorId);
+      if (hit && hit.type === 'piece') {
+        const ids = App.state.selection.size > 1 && App.state.selection.has(hit.pieceId)
+          ? [...App.state.selection]
+          : [hit.pieceId];
+        App.repaintCells(ids, App.state.selectedColorId);
       }
     }
   }
@@ -722,11 +724,13 @@
       case 'r': case 'R': App.setTool('select'); break;
       case 'q': case 'Q':
         if (App.state.placingMultiGhost) { App.rotateMultiGhost(-1); }
-        else if (_INCLINE_TYPES.has(App.state.selectedObject)) { App.rotatePlaceDirection(-1); Scene.markDirty(); }
+        else if (Geometry.getPieceFamily(App.state.selectedObject) === 'triangle-family') { Scene.cycleGhostRotation(-1); }
+        else if (Geometry.getPieceFamily(App.state.selectedObject) === 'square-family') { Scene.cycleGhostRotation(-1); }
         break;
       case 'e': case 'E':
         if (App.state.placingMultiGhost) { App.rotateMultiGhost(1); }
-        else if (_INCLINE_TYPES.has(App.state.selectedObject)) { App.rotatePlaceDirection(1); Scene.markDirty(); }
+        else if (Geometry.getPieceFamily(App.state.selectedObject) === 'triangle-family') { Scene.cycleGhostRotation(1); }
+        else if (Geometry.getPieceFamily(App.state.selectedObject) === 'square-family') { Scene.cycleGhostRotation(1); }
         break;
       case 't': case 'T':
         App.setTool('delete');
@@ -765,11 +769,13 @@
     const inMG   = !!App.state.placingMultiGhost;
     const inSt   = !!App.state.placingStamp;
     const isDir  = _INCLINE_TYPES.has(obj);
+    const isTri  = obj === 'triangle';
+    const isQE   = Geometry.getPieceFamily(obj) === 'square-family' || Geometry.getPieceFamily(obj) === 'triangle-family';
     const isSel  = tool === 'select' || tool === 'area-select';
 
     const rules = {
-      q:     inMG || inSt || isDir,
-      e:     inMG || inSt || isDir,
+      q:     inMG || inSt || isQE,
+      e:     inMG || inSt || isQE,
       y:     inMG || inSt,
       z:     inMG || inSt,
       x:     inMG || inSt,
@@ -843,6 +849,11 @@
     document.getElementById('btn-add-colour').addEventListener('click', () => {
       _showColourModal('Add Colour', '#3a6b8c', hex => App.addColor(hex));
     });
+    document.getElementById('btn-clear-all').addEventListener('click', () => {
+      if (!App.state.pieces.size) return;
+      showDangerModal('Delete all pieces? This cannot be undone.', () => App.clearAll());
+    });
+
     document.getElementById('btn-edit-footprint').addEventListener('click', () => {
       showFootprintEditor();
     });
@@ -884,6 +895,12 @@
       App.setShowPlacementGhost(e.target.checked);
       if (!e.target.checked) Scene.setHoverHit(null);
     });
+
+    document.getElementById('toggle-xray').addEventListener('change', e => {
+      App.state.xray = e.target.checked;
+      Scene.markDirty();
+      e.target.blur();
+    });
   }
 
   // ── Viewport wiring ────────────────────────────────────────────
@@ -892,13 +909,14 @@
     viewport.addEventListener('pointerdown',  _onViewportPointerDown);
     viewport.addEventListener('pointerup',    _onViewportPointerUp);
     viewport.addEventListener('pointermove',  _onViewportMove);
-    viewport.addEventListener('pointerleave', () => { Scene.setHoverHit(null); Scene.setMultiGhostOrigin(null, null); _asRemoveRect(); });
+    viewport.addEventListener('pointerleave', () => { Scene.setHoverHit(null); App.clearGhost(); Scene.setMultiGhostOrigin(null); _asRemoveRect(); });
   }
 
   // ── Footprint "Done" wiring ────────────────────────────────────
   function _wireFootprintDone() {
     document.querySelector('.js-fp-done').addEventListener('click', () => {
       _showView('canvas');
+      if (window.Scene) Scene.recentreCamera();
     });
   }
 
