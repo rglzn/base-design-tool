@@ -588,6 +588,12 @@
       return;
     }
 
+    if (App.state.placingMultiGhost) {
+      const hit = Scene.pickAt(e.clientX, e.clientY);
+      Scene.setMultiGhostOrigin(hit);
+      return;
+    }
+
     if (App.state.tool !== 'build') return;
     const hit = Scene.pickAt(e.clientX, e.clientY);
     Scene.setHoverHit(hit);
@@ -604,9 +610,28 @@
 
   function _onViewportPointerUp(e) {
     if (_currentView !== 'canvas') return;
-    // Right-click (button 2) is camera rotate — never touches selection.
     if (e.button === 2) return;
     if (e.target.closest('#hud')) { _asRemoveRect(); return; }
+
+    // Multi-ghost placement — highest priority, fires before all other logic
+    if (App.state.placingMultiGhost) {
+      _asRemoveRect();
+      const hit = Scene.pickAt(e.clientX, e.clientY);
+      Scene.setMultiGhostOrigin(hit);
+      const origin = hit
+        ? (hit.type === 'ground'
+            ? { x: hit.gridX, y: 0, z: hit.gridZ }
+            : (() => {
+                const p = App.getPiece(hit.pieceId);
+                if (!p) return null;
+                const n = hit.faceNormal;
+                return { x: p.position.x + Math.round(n.x), y: p.position.y + Math.round(n.y), z: p.position.z + Math.round(n.z) };
+              })()
+          )
+        : null;
+      if (origin) App.placeMultiGhost(origin);
+      return;
+    }
 
     if (App.state.tool === 'area-select') {
       if (_asDragging) {
@@ -681,7 +706,12 @@
         App.clearSelection();
       }
     } else if (tool === 'paint') {
-      // paint not yet wired in v2 — no-op
+      if (hit && hit.type === 'piece') {
+        const ids = App.state.selection.size > 1 && App.state.selection.has(hit.pieceId)
+          ? [...App.state.selection]
+          : [hit.pieceId];
+        App.repaintCells(ids, App.state.selectedColorId);
+      }
     }
   }
 
@@ -787,6 +817,11 @@
     document.getElementById('btn-add-colour').addEventListener('click', () => {
       _showColourModal('Add Colour', '#3a6b8c', hex => App.addColor(hex));
     });
+    document.getElementById('btn-clear-all').addEventListener('click', () => {
+      if (!App.state.pieces.size) return;
+      showDangerModal('Delete all pieces? This cannot be undone.', () => App.clearAll());
+    });
+
     document.getElementById('btn-edit-footprint').addEventListener('click', () => {
       showFootprintEditor();
     });
@@ -828,6 +863,12 @@
       App.setShowPlacementGhost(e.target.checked);
       if (!e.target.checked) Scene.setHoverHit(null);
     });
+
+    document.getElementById('toggle-xray').addEventListener('change', e => {
+      App.state.xray = e.target.checked;
+      Scene.markDirty();
+      e.target.blur();
+    });
   }
 
   // ── Viewport wiring ────────────────────────────────────────────
@@ -836,13 +877,14 @@
     viewport.addEventListener('pointerdown',  _onViewportPointerDown);
     viewport.addEventListener('pointerup',    _onViewportPointerUp);
     viewport.addEventListener('pointermove',  _onViewportMove);
-    viewport.addEventListener('pointerleave', () => { Scene.setHoverHit(null); App.clearGhost(); _asRemoveRect(); });
+    viewport.addEventListener('pointerleave', () => { Scene.setHoverHit(null); App.clearGhost(); Scene.setMultiGhostOrigin(null); _asRemoveRect(); });
   }
 
   // ── Footprint "Done" wiring ────────────────────────────────────
   function _wireFootprintDone() {
     document.querySelector('.js-fp-done').addEventListener('click', () => {
       _showView('canvas');
+      if (window.Scene) Scene.recentreCamera();
     });
   }
 

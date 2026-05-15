@@ -46,7 +46,7 @@ You are the Dev. We are working on [Step X — title].
 
 **v2 prompt format:**
 ```
-You are the Dev. We are working on [V2 Step X — title]. This is a v2 step — work on the `v2` branch only.
+You are the Dev. We are working on [V2 Step X — title].
 ```
 
 If the step requires specific spec sections, append to either format:

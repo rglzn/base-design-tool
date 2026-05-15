@@ -134,6 +134,12 @@ Full graph model replacing the cubic integer voxel grid. The game uses a square-
 ## V2 Status
 
 ### Done
+- **V2 Step 8** — Delete a piece. Orphaned connected pieces stay; connections to deleted piece are nulled.
+- **V2 Step 9** — Select + single-piece operations (paint). Selection becomes Set<pieceId>.
+- **V2 Step 10** — Duplicate / pick-up: ghost as connected subgraph with root face. Rotation cycles root face and attachment rotation.
+- **V2 Step 11** — Stamps as saved subgraphs. Reuses Step 10 ghost infrastructure.
+- **V2 Step 12** — Footprint test in world space. Polygon-in-landclaim test for squares and triangles.
+- **V2 Step 13** — Save/load, project CRUD. Serialisation format update only; CRUD logic unchanged.
 - **V2 Step 1** — Geometry primitives & rotation algebra. geometry.js created with 12-rotation set, square and triangle face descriptors, attachment transform.
 - **V2 Step 2** — State shape: pieces and connections. cells Map replaced with pieces Map and connection graph. Core App methods: placePiece, deletePiece, getPiece.
 - **V2 Step 3** — Render pieces from new state. _rebuildPieces renders squares and triangles from pieces Map.
@@ -143,13 +149,13 @@ Full graph model replacing the cubic integer voxel grid. The game uses a square-
 - **V2 Step 7** — Full shape library. Port all 13 remaining square-family types from v1 into v2. Each type: render geometry in scene.js (`_makeInclineGeo` / `_addDecalLines` as appropriate), face descriptors in geometry.js, sidebar registration in ui.js. All types use square-family placement logic — no new placement rules. Directional types (all except cube/square) use existing N/E/S/W rotation via rotationIndex. (geometry.js, scene.js, ui.js)
 
 ### To Do
-- **V2 Step 8** — Delete a piece. Orphaned connected pieces stay; connections to deleted piece are nulled.
-- **V2 Step 9** — Select + single-piece operations (paint). Selection becomes Set<pieceId>.
-- **V2 Step 10** — Duplicate / pick-up: ghost as connected subgraph with root face. Rotation cycles root face and attachment rotation.
-- **V2 Step 11** — Stamps as saved subgraphs. Reuses Step 10 ghost infrastructure.
-- **V2 Step 12** — Footprint test in world space. Polygon-in-landclaim test for squares and triangles.
-- **V2 Step 13** — Save/load, project CRUD. Serialisation format update only; CRUD logic unchanged.
+- **V2 Step 14** — New shape library additions: half-corner, half-corner-inverted, half-corner-plus, half-corner-inverted-plus, half-cube-low, half-cube-high. Same pattern as Step 7 — geometry, face descriptors, sidebar registration. (geometry.js, scene.js, ui.js)
+- **V2 Step 15** — Review and finalise all object names across the full shape library for consistency and clarity. Architect-only task — no Dev involvement.
+- **V2 Step 16** — Sidebar UI categories discussion. Object list is long and growing; evaluate grouping by family or function. Needs design decision before implementation. Architect-led discussion.
+- **V2 Step 17** — Refactor all reference docs to v2. v1 references deprecated; spec-v2.md to absorb relevant detail from spec.md. Architect-only task.
+- **V2 Step 18** — Full code audit with Opus. Review all source files for correctness, consistency, and technical debt against the finalised v2 spec.
+- **V2 Step 19** — Collision visualisation improvement. When ghost is red, highlight the conflicting piece(s) in the scene to make the conflict source visible. (scene.js)
 
 ## V2 Current State
 
-Steps 1–7 complete.
+Steps 1–13 complete. All core placement, deletion, selection, stamps, footprint, and save/load implemented. Next step is Step 14 (new shape library additions).

@@ -37,6 +37,7 @@
     ghost:              null,
     xray:               false,
     placingStamp:       null,
+    placingMultiGhost:  null,  // { pieces, rotationOffset, anchorIdx, levelOffset, pickUp }
     stamps:             [],   // local cache of Supabase stamps table
   };
 
@@ -81,7 +82,7 @@
 
     state.pieces = new Map();
     (data.pieces || []).forEach(p => {
-      if (!['square', 'triangle'].includes(p.type)) return;
+      try { Geometry.getPieceFamily(p.type); } catch (_) { return; }
       state.pieces.set(p.id, {
         id:            p.id,
         type:          p.type,
@@ -114,6 +115,7 @@
     state.ghost              = null;
     state.xray               = false;
     state.placingStamp       = null;
+    state.placingMultiGhost  = null;
   }
 
   // ── Tool / object / colour ─────────────────────────────────────
@@ -235,8 +237,197 @@
     return true;
   }
 
+  function clearAll() {
+    state.pieces.clear();
+    state.connections.clear();
+    state.selection.clear();
+    state.placingMultiGhost = null;
+    state.placingStamp      = null;
+    _markDirty();
+    _refreshUI();
+  }
+
   /* getPiece(id) → piece | undefined */
   function getPiece(id) { return state.pieces.get(id); }
+
+  /*
+   * repaintCells(ids, colorId)
+   * Sets colorId on every piece in the ids array.
+   */
+  function repaintCells(ids, colorId) {
+    ids.forEach(id => {
+      const piece = state.pieces.get(id);
+      if (piece) piece.colorId = colorId;
+    });
+    _markDirty();
+    _refreshUI();
+  }
+
+  /*
+   * deleteSelection()
+   * Deletes every piece in the current selection.
+   */
+  function deleteSelection() {
+    const ids = [...state.selection];
+    ids.forEach(id => deletePiece(id));
+    _markDirty();
+    _refreshUI();
+  }
+
+  // ── Multi-ghost (duplicate / pick-up) ─────────────────────────
+  /*
+   * Multi-ghost state shape:
+   * placingMultiGhost: {
+   *   pieces:         Array<{ type, colorId, relX, relY, relZ, rotationIndex }>
+   *                   — positions relative to anchor piece, at rotationOffset=0
+   *   anchorIdx:      index into pieces[] of the anchor piece
+   *   rotationOffset: 0–3, increments of 90° (rotIndex steps of 3)
+   *   levelOffset:    integer Y shift applied to all pieces
+   *   pickUp:         bool — if true, originals were deleted on start
+   * }
+   *
+   * The anchor piece is always rendered at the cursor world position.
+   * All other pieces are offset from the anchor by their rel* values,
+   * rotated as a unit by rotationOffset × 90° around the anchor.
+   */
+
+  function _rotateOffsetCW(dx, dz) {
+    // Rotate (dx, dz) 90° clockwise in XZ: (dx,dz) → (dz, -dx)
+    return { dx: dz, dz: -dx };
+  }
+
+  function startMultiGhost(pickUp) {
+    if (!state.selection.size) return;
+    const ids = [...state.selection];
+
+    // Capture full piece data before any deletion
+    const anchor = state.pieces.get(ids[0]);
+    if (!anchor) return;
+
+    const originalPieces = pickUp
+      ? ids.map(id => ({ ...state.pieces.get(id), position: { ...state.pieces.get(id).position } }))
+      : null;
+
+    const pieces = ids.map(id => {
+      const p = state.pieces.get(id);
+      return {
+        type:          p.type,
+        colorId:       p.colorId,
+        rotationIndex: p.rotationIndex,
+        relX:          p.position.x - anchor.position.x,
+        relY:          p.position.y - anchor.position.y,
+        relZ:          p.position.z - anchor.position.z,
+      };
+    });
+
+    if (pickUp) {
+      ids.forEach(id => deletePiece(id));
+    }
+
+    state.selection.clear();
+    state.placingMultiGhost = {
+      pieces,
+      anchorIdx:      0,
+      rotationOffset: 0,
+      levelOffset:    0,
+      pickUp,
+      originalPieces,
+    };
+    _markDirty();
+    _refreshUI();
+  }
+
+  function rotateMultiGhost(dir) {
+    const mg = state.placingMultiGhost;
+    if (!mg) return;
+    // dir: +1 = CW, -1 = CCW
+    const steps = ((mg.rotationOffset + dir) % 4 + 4) % 4;
+    mg.rotationOffset = steps;
+    _markDirty();
+  }
+
+  function cycleMultiGhostAnchor() {
+    const mg = state.placingMultiGhost;
+    if (!mg) return;
+    mg.anchorIdx = (mg.anchorIdx + 1) % mg.pieces.length;
+    _markDirty();
+  }
+
+  function shiftMultiGhostLevel(dir) {
+    const mg = state.placingMultiGhost;
+    if (!mg) return;
+    mg.levelOffset += dir;
+    _markDirty();
+  }
+
+  function cancelMultiGhost() {
+    const mg = state.placingMultiGhost;
+    if (mg && mg.pickUp && mg.originalPieces) {
+      mg.originalPieces.forEach(p => {
+        state.pieces.set(p.id, {
+          id:            p.id,
+          type:          p.type,
+          position:      { ...p.position },
+          rotationIndex: p.rotationIndex,
+          colorId:       p.colorId,
+        });
+      });
+    }
+    state.placingMultiGhost = null;
+    state.placingStamp      = null;
+    _markDirty();
+    _refreshUI();
+  }
+
+  /*
+   * placeMultiGhost(anchorWorldPos)
+   * anchorWorldPos: { x, y, z } — world position of the anchor piece (from scene hit)
+   * Places all pieces at their rotated offsets from the anchor.
+   */
+  function placeMultiGhost(anchorWorldPos) {
+    const mg = state.placingMultiGhost;
+    if (!mg || !anchorWorldPos) return;
+
+    const rot  = mg.rotationOffset; // 0–3
+    const ancP = mg.pieces[mg.anchorIdx];
+
+    state.selection.clear();
+
+    // For each piece, compute its offset from the anchor piece in the rotated frame.
+    mg.pieces.forEach((p, i) => {
+      // Offset relative to anchor piece (unrotated)
+      let dx = p.relX - ancP.relX;
+      let dz = p.relZ - ancP.relZ;
+      const dy = p.relY - ancP.relY;
+
+      // Rotate offset CW by rotationOffset steps
+      for (let r = 0; r < rot; r++) {
+        const rotated = _rotateOffsetCW(dx, dz);
+        dx = rotated.dx;
+        dz = rotated.dz;
+      }
+
+      const wx = Math.round(anchorWorldPos.x + dx);
+      const wy = Math.round(anchorWorldPos.y + dy + mg.levelOffset);
+      const wz = Math.round(anchorWorldPos.z + dz);
+
+      // Rotate each piece's rotationIndex by rotationOffset × 3 steps (90° each)
+      const newRotIndex = (p.rotationIndex + rot * 3) % 12;
+
+      const newId = placePiece({
+        type:          p.type,
+        position:      { x: wx, y: wy, z: wz },
+        rotationIndex: newRotIndex,
+        colorId:       p.colorId,
+      });
+      if (newId !== null) state.selection.add(newId);
+    });
+
+    state.placingMultiGhost = null;
+    state.placingStamp      = null;
+    _markDirty();
+    _refreshUI();
+  }
 
   // ── Selection ──────────────────────────────────────────────────
   function _markSceneDirty() { if (window.Scene) window.Scene.markDirty(); _refreshUI(); }
@@ -500,9 +691,27 @@
   }
 
   function activateStampPlacement(stamp) {
-    // v2 stub — full implementation in Step 9
-    if (!stamp) return;
+    if (!stamp?.data?.pieces?.length) return;
+    const src = stamp.data.pieces;
+    const anchor = src[0];
+    const pieces = src.map(p => ({
+      type:          p.type,
+      colorId:       p.colorId,
+      rotationIndex: p.rotationIndex,
+      relX:          p.position.x - anchor.position.x,
+      relY:          p.position.y - anchor.position.y,
+      relZ:          p.position.z - anchor.position.z,
+    }));
+    state.selection.clear();
+    state.placingMultiGhost = {
+      pieces,
+      anchorIdx:      0,
+      rotationOffset: 0,
+      levelOffset:    0,
+      pickUp:         false,
+    };
     state.placingStamp = stamp;
+    _markDirty();
     _refreshUI();
   }
 
@@ -553,6 +762,7 @@
     state.ghost           = null;
     state.xray            = false;
     state.placingStamp    = null;
+    state.placingMultiGhost = null;
     state.stamps          = [];
     _nextColorId          = DEFAULT_COLOURS.length;
     _nextPieceId          = 0;
@@ -564,7 +774,8 @@
     state,
     setTool, setSelectedObject, setColor, setShowPlacementGhost,
     addColor, updateColor, deleteColor, getColorHex,
-    placePiece, deletePiece, getPiece,
+    placePiece, deletePiece, getPiece, repaintCells, deleteSelection, clearAll,
+    startMultiGhost, rotateMultiGhost, cycleMultiGhostAnchor, shiftMultiGhostLevel, cancelMultiGhost, placeMultiGhost,
     addToSelection, removeFromSelection, clearSelection,
     setGhost, clearGhost,
     addBlock, removeBlock, blockHasContent, canRemoveBlock, footprintLabel,

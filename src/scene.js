@@ -16,6 +16,18 @@
 
   const _keys = new Set();
 
+  // ── Recentre camera to footprint centroid ───────────────────
+  function recentreCamera() {
+    const building = App.state.building;
+    const cx = (building.reduce((s, b) => s + b.bx, 0) / building.length) * 10 + 5;
+    const cz = (building.reduce((s, b) => s + b.bz, 0) / building.length) * 10 + 5;
+    const height = _camera.position.y || 16;
+    const dist   = 21;
+    _camera.position.set(cx, height, cz + dist);
+    _controls.target.set(cx, 0, cz);
+    markDirty();
+  }
+
   // ── Init ───────────────────────────────────────────────────────
   function init() {
     const viewport = document.getElementById('viewport');
@@ -28,11 +40,9 @@
     _scene = new THREE.Scene();
 
     _camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
-    _camera.position.set(22, 16, 26);
 
     // Left drag = pan, right drag = rotate/tilt, scroll = zoom
     _controls = new THREE.OrbitControls(_camera, _renderer.domElement);
-    _controls.target.set(5, 0, 5);
     _controls.enableDamping  = true;
     _controls.dampingFactor  = 0.07;
     _controls.screenSpacePanning = true;
@@ -43,6 +53,7 @@
     };
     _controls.zoomSpeed   = App.getSettings().zoomSpeed;
     _controls.rotateSpeed = App.getSettings().rotateSpeed;
+    recentreCamera();
     _controls.update();
     _controls.addEventListener('change', markDirty);
 
@@ -254,11 +265,14 @@
       const isTriangle = family === 'triangle-family';
 
       const selected = App.state.selection.has(piece.id);
+      const xray = App.state.xray;
       const mat = new THREE.MeshLambertMaterial({
         color: new THREE.Color(App.getColorHex(piece.colorId)),
         polygonOffset: true,
         polygonOffsetFactor: 1,
         polygonOffsetUnits: 1,
+        transparent: xray,
+        opacity: xray ? 0.25 : 1.0,
       });
 
       let geo, edgeGeo;
@@ -597,6 +611,30 @@
     }
 
     return null;
+  }
+
+  // ── Multi-ghost origin (set by UI pointer move) ─────────────
+  let _multiGhostOrigin = null; // { x, y, z } grid position of anchor
+
+  function setMultiGhostOrigin(hit) {
+    if (!hit) {
+      _multiGhostOrigin = null;
+      markDirty();
+      return;
+    }
+    if (hit.type === 'ground') {
+      _multiGhostOrigin = { x: hit.gridX, y: 0, z: hit.gridZ };
+    } else if (hit.type === 'piece') {
+      const piece = App.getPiece(hit.pieceId);
+      if (!piece) { _multiGhostOrigin = null; markDirty(); return; }
+      const n = hit.faceNormal;
+      _multiGhostOrigin = {
+        x: piece.position.x + Math.round(n.x),
+        y: piece.position.y + Math.round(n.y),
+        z: piece.position.z + Math.round(n.z),
+      };
+    }
+    markDirty();
   }
 
   // ── Ghost validity checks ─────────────────────────────────────
@@ -941,7 +979,7 @@
           selfFaceIndex = G.TRIANGLE_ATTACHMENT_FACE_INDEX;
           const T_B = G.getAttachmentTransform(T_A, bestFaceA, attachFaceDesc);
           rotationIndex = T_B.rotationIndex;
-          const yFixTri = piece.type === 'square' ? 0.5 : 0;
+          const yFixTri = Geometry.getPieceFamily(piece.type) === 'square-family' ? 0.5 : 0;
           ghostPos = {
             x: Math.round(T_B.position.x * 1000) / 1000,
             y: Math.round((T_B.position.y - yFixTri) * 1000) / 1000,
@@ -1019,6 +1057,60 @@
 
   function _rebuildGhost() {
     _ghostGroup.clear();
+
+    // ── Multi-ghost ──────────────────────────────────────────────
+    const mg = App.state.placingMultiGhost;
+    if (mg && _multiGhostOrigin) {
+      const origin  = _multiGhostOrigin;
+      const rot     = mg.rotationOffset;
+      const ancP    = mg.pieces[mg.anchorIdx];
+
+      mg.pieces.forEach(p => {
+        // Offset from anchor in unrotated frame
+        let dx = p.relX - ancP.relX;
+        let dz = p.relZ - ancP.relZ;
+        const dy = p.relY - ancP.relY;
+
+        // Rotate offset CW by rot steps
+        for (let r = 0; r < rot; r++) {
+          const tmp = dx;
+          dx =  dz;
+          dz = -tmp;
+        }
+
+        const wx = origin.x + dx;
+        const wy = origin.y + dy + mg.levelOffset;
+        const wz = origin.z + dz;
+        const newRotIndex = (p.rotationIndex + rot * 3) % 12;
+
+        const isSquare = Geometry.getPieceFamily(p.type) === 'square-family';
+        let geo;
+        if (!isSquare) {
+          geo = _triangleGeo;
+        } else if (p.type === 'square') {
+          geo = _squareGeo;
+        } else {
+          geo = _makeInclineGeo(p.type);
+        }
+
+        // Simple validity: in footprint
+        const valid = _ghostInFootprint(p.type, { x: wx, y: wy, z: wz }, newRotIndex);
+        const mat = valid ? _ghostMatValid : _ghostMatInvalid;
+        const mesh = new THREE.Mesh(geo, mat);
+
+        if (isSquare) {
+          mesh.position.set(wx + 0.5, wy + 0.5, wz + 0.5);
+        } else {
+          mesh.position.set(wx, wy, wz);
+        }
+        mesh.rotation.y = _rotIndexToRad(newRotIndex);
+        _addDecalLines(mesh, p.type);
+        _ghostGroup.add(mesh);
+      });
+      return;
+    }
+
+    // ── Single placement ghost ───────────────────────────────────
     const ghost = App.state.ghost;
     if (!ghost || !App.state.showPlacementGhost) return;
 
@@ -1165,6 +1257,6 @@
     _controls.mouseButtons.LEFT = active ? THREE.MOUSE.NONE : THREE.MOUSE.PAN;
   }
 
-  window.Scene = { init, markDirty, pickAt, setHoverHit, cycleGhostRotation, getSnapshot, selectInScreenRect, applySettings, setAreaSelectMode };
+  window.Scene = { init, markDirty, pickAt, setHoverHit, cycleGhostRotation, getSnapshot, selectInScreenRect, applySettings, setAreaSelectMode, recentreCamera, setMultiGhostOrigin };
 
 }());
